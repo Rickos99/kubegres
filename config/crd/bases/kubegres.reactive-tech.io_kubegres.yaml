@@ -492,6 +492,9 @@ spec:
               replicas:
                 format: int32
                 type: integer
+              debugPods:
+                format: int32
+                type: integer
               resources:
                 description: ResourceRequirements describes the compute resource requirements.
                 properties:

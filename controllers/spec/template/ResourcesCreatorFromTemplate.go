@@ -172,6 +172,17 @@ func (r *ResourcesCreatorFromTemplate) CreateBackUpCronJob(configMapNameForBackU
 	return backUpCronJob, nil
 }
 
+func (r *ResourcesCreatorFromTemplate) CreateDebugPod() (core.Pod, error) {
+	debugPodTemplate, err := r.templateFromFiles.LoadDebugPod()
+	if err != nil {
+		return core.Pod{}, err
+	}
+
+	r.initDebugPod(&debugPodTemplate)
+
+	return debugPodTemplate, nil
+}
+
 func (r *ResourcesCreatorFromTemplate) initService(service *core.Service) {
 
 	resourceName := r.kubegresContext.Kubegres.Name
@@ -264,6 +275,13 @@ func (r *ResourcesCreatorFromTemplate) initStatefulSet(
 	if postgresSpec.Probe.ReadinessProbe != nil {
 		statefulSetTemplate.Spec.Template.Spec.Containers[0].ReadinessProbe = postgresSpec.Probe.ReadinessProbe
 	}
+}
+
+func (r *ResourcesCreatorFromTemplate) initDebugPod(debugPod *core.Pod) {
+	resourceName := r.kubegresContext.Kubegres.Name
+	debugPod.Namespace = r.kubegresContext.Kubegres.Namespace
+	debugPod.OwnerReferences = r.getOwnerReference()
+	debugPod.Labels["app"] = resourceName
 }
 
 // Extract annotations set in Kubegres YAML by

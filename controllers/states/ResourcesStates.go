@@ -31,6 +31,7 @@ type ResourcesStates struct {
 	Services       ServicesStates
 	Config         ConfigStates
 	BackUp         BackUpStates
+	DebugPods      DebugPodsStates
 
 	kubegresContext ctx.KubegresContext
 }
@@ -68,6 +69,11 @@ func (r *ResourcesStates) loadStates() (err error) {
 		return err
 	}
 
+	err = r.loadDebugPods()
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -93,5 +99,10 @@ func (r *ResourcesStates) loadServicesStates() (err error) {
 
 func (r *ResourcesStates) loadBackUpStates() (err error) {
 	r.BackUp, err = loadBackUpStates(r.kubegresContext)
+	return err
+}
+
+func (r *ResourcesStates) loadDebugPods() (err error) {
+	r.DebugPods, err = loadDebugPodsStates(r.kubegresContext)
 	return err
 }

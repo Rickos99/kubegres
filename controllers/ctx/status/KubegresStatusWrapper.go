@@ -2,6 +2,7 @@ package status
 
 import (
 	"context"
+
 	v1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx/log"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -40,6 +41,15 @@ func (r *KubegresStatusWrapper) GetEnforcedReplicas() int32 {
 func (r *KubegresStatusWrapper) SetEnforcedReplicas(value int32) {
 	r.addStatusFieldToUpdate("EnforcedReplicas", value)
 	r.Kubegres.Status.EnforcedReplicas = value
+}
+
+func (r *KubegresStatusWrapper) GetEnforcedDebugPods() int32 {
+	return r.Kubegres.Status.EnforcedDebugPods
+}
+
+func (r *KubegresStatusWrapper) SetEnforcedDebugPods(value int32) {
+	r.addStatusFieldToUpdate("EnforcedDebugPods", value)
+	r.Kubegres.Status.EnforcedDebugPods = value
 }
 
 func (r *KubegresStatusWrapper) GetPreviousBlockingOperation() v1.KubegresBlockingOperation {

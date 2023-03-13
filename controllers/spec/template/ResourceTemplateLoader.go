@@ -74,6 +74,17 @@ func (r *ResourceTemplateLoader) LoadBackUpCronJob() (cronJob batch.CronJob, err
 	return *obj.(*batch.CronJob), nil
 }
 
+func (r *ResourceTemplateLoader) LoadDebugPod() (debugPodTemplate core.Pod, err error) {
+	obj, err := r.decodeYaml(yaml.DebugPodTemplate)
+
+	if err != nil {
+		r.log.Error(err, "Unable to load Kubegres DebugPod. Given error:")
+		return core.Pod{}, err
+	}
+
+	return *obj.(*core.Pod), nil
+}
+
 func (r *ResourceTemplateLoader) loadService(yamlContents string) (serviceTemplate core.Service, err error) {
 
 	obj, err := r.decodeYaml(yamlContents)

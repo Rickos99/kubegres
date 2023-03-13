@@ -199,6 +199,44 @@ data:
 
     echo "$dt - DB backup completed for Kubegres resource $KUBEGRES_RESOURCE_NAME into file: $backUpFilePath";
 
+  # Script to restore a database from a snapshot.
+  #
+  # Assumptions:
+  #   - Name of default database is not equal to the name of database to restore.
+  #   - Name of database to restore is not equal to "tmp_restore".
+  #   - The snapshot to use contains one database.
+  #
+  # Environment
+  #   PG_SNAPSHOT: name of snapshot to use, without filepath.
+  #
+  # Steps:
+  #   - Create an immediate database to feed pg_restore with.
+  #   - Apply dumpfile.
+  #   - Remove the immediate database.
+  restore_database: |
+    #!/bin/bash
+    set -e
+
+    dt=$(date '+%d/%m/%Y %H:%M:%S')
+    pg_restorepoint_file="/docker-entrypoint-initdb.d/$PG_SNAPSHOT"
+    pg_temporary_restore_db="tmp_restore"
+
+    echo "$dt - Running: createdb -U postgres $pg_temporary_restore_db"
+    createdb -U postgres $pg_temporary_restore_db
+
+    echo "$dt - Running: pg_restore -e -U postgres -C -d $pg_temporary_restore_db $pg_restorepoint_file"
+    pg_restore -e -U postgres -C -d $pg_temporary_restore_db $pg_restorepoint_file
+
+    echo "$dt - Running: dropdb -U postgres $pg_temporary_restore_db"
+    dropdb -U postgres $pg_temporary_restore_db
+
+    if [ $? -ne 0 ]; then # In current state, this doesn't do anything. Taken from backup_database.sh by Kubegres
+        echo "Unable to restore a backup"
+        exit 1
+    fi
+
+    echo "$dt - DB restored from file $pg_restorepoint_file successfully"
+
 
   # This is the standard Postgres host-based authentication (hba) config applying to Primary and Replica servers.
   # https://www.postgresql.org/docs/current/auth-pg-hba-conf.html
@@ -317,6 +355,26 @@ data:
     echo "$dt - Promoting by creating the promotion trigger file: '$promotionTriggerFilePath'"
     touch $promotionTriggerFilePath
 
+`
+DebugPodTemplate = `apiVersion: v1
+kind: Pod
+metadata:  
+  name: null
+  generateName: debug-pod-
+  namespace: default
+  labels:
+    app: postgres-name
+    replicationRole: none
+    role: debug
+spec:  
+  containers:    
+    - image: busybox
+      name: pvc-inspector
+      command: ["tail", "-f", "/dev/null"]
+      resources:
+        limits:
+          memory: "128Mi"
+          cpu: "500m"
 `
 PrimaryServiceTemplate = `apiVersion: v1
 kind: Service

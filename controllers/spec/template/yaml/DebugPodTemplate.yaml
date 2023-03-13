@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Pod
+metadata:  
+  name: null
+  generateName: debug-pod-
+  namespace: default
+  labels:
+    app: postgres-name
+    replicationRole: none
+    role: debug
+spec:  
+  containers:    
+    - image: busybox
+      name: pvc-inspector
+      command: ["tail", "-f", "/dev/null"]
+      resources:
+        limits:
+          memory: "128Mi"
+          cpu: "500m"

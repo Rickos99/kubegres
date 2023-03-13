@@ -80,6 +80,7 @@ type KubegresSpec struct {
 	Volume           Volume                    `json:"volume,omitempty"`
 	SecurityContext  *v1.PodSecurityContext    `json:"securityContext,omitempty"`
 	Probe            Probe                     `json:"probe,omitempty"`
+	DebugPods        int32                     `json:"debugPods,omitempty"`
 }
 
 // ----------------------- STATUS -----------------------------------------
@@ -109,6 +110,7 @@ type KubegresStatus struct {
 	BlockingOperation         KubegresBlockingOperation `json:"blockingOperation,omitempty"`
 	PreviousBlockingOperation KubegresBlockingOperation `json:"previousBlockingOperation,omitempty"`
 	EnforcedReplicas          int32                     `json:"enforcedReplicas,omitempty"`
+	EnforcedDebugPods         int32                     `json:"enforcedDebugPods,omitempty"`
 }
 
 // ----------------------- RESOURCE ---------------------------------------

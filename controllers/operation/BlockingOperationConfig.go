@@ -42,4 +42,8 @@ const (
 	OperationStepIdStatefulSetSpecUpdating      = "StatefulSet's spec is updating"
 	OperationStepIdStatefulSetPodSpecUpdating   = "StatefulSet Pod's spec is updating"
 	OperationStepIdStatefulSetWaitingOnStuckPod = "Attempting to fix a stuck Pod by recreating it"
+
+	OperationIdDebugPodSpecEnforcing   = "Debug Pod count spec enforcement"
+	OperationStepIdDebugPodDeploying   = "Debug Pod is deploying"
+	OperationStepIdDebugPodUndeploying = "Debug Pod is undeploying"
 )
