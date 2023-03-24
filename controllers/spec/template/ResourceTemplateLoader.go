@@ -26,12 +26,13 @@ import (
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
+	kubegresv1 "reactive-tech.io/kubegres/api/v1"
 	log2 "reactive-tech.io/kubegres/controllers/ctx/log"
 	"reactive-tech.io/kubegres/controllers/spec/template/yaml"
 )
 
 type ResourceTemplateLoader struct {
-	log log2.LogWrapper
+	log log2.LogWrapper[*kubegresv1.Kubegres]
 }
 
 func (r *ResourceTemplateLoader) LoadBaseConfigMap() (configMap core.ConfigMap, err error) {

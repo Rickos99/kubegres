@@ -34,7 +34,7 @@ type KubegresContext struct {
 	Kubegres *v1.Kubegres
 	Status   *status.KubegresStatusWrapper
 	Ctx      context.Context
-	Log      log.LogWrapper
+	Log      log.LogWrapper[*v1.Kubegres]
 	Client   client.Client
 }
 
