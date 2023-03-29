@@ -116,6 +116,32 @@ rules:
   - patch
   - update
 - apiGroups:
+  - kubegres.reactive-tech.io
+  resources:
+  - kubegresrestores
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - kubegres.reactive-tech.io
+  resources:
+  - kubegresrestores/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - kubegres.reactive-tech.io
+  resources:
+  - kubegresrestores/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - storage.k8s.io
   resources:
   - storageclasses

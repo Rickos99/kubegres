@@ -23,6 +23,7 @@ package main
 import (
 	"flag"
 	"os"
+
 	ctx2 "reactive-tech.io/kubegres/controllers/ctx"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -103,6 +104,16 @@ func main() {
 		Recorder: mgr.GetEventRecorderFor("Kubegres-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", ctx2.KindKubegres)
+		os.Exit(1)
+	}
+
+	if err = (&controllers.KubegresRestoreReconciler{
+		Client:   mgr.GetClient(),
+		Logger:   ctrl.Log.WithName("restoreController").WithName("KubegresRestore"),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("KubegresRestore-controller"),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "KubegresRestore")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

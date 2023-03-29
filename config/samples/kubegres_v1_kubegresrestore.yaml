@@ -1,0 +1,6 @@
+apiVersion: kubegres.reactive-tech.io/v1
+kind: KubegresRestore
+metadata:
+  name: kubegresrestore-sample
+spec:
+  # TODO(user): Add fields here
