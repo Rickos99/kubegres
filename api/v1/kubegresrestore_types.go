@@ -23,32 +23,29 @@ import (
 
 // ----------------------- SPEC -------------------------------------------
 
-type ClusterConfig struct {
-	TargetReplicas   *int32                    `json:"replicas,omitempty"`
-	Resources        v1.ResourceRequirements   `json:"resources,omitempty"`
-	Database         KubegresDatabase          `json:"database,omitempty"`
-	ImagePullSecrets []v1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
-	Env              []v1.EnvVar               `json:"env,omitempty"`
-	CustomConfig     string                    `json:"customConfig,omitempty"`
-}
-
-type DataSource struct {
+type File struct {
 	PvcName  string `json:"pvcName,omitempty"`
 	Snapshot string `json:"snapshot,omitempty"`
 }
 
-type KubegresRestoreSpec struct {
-	DataSource DataSource              `json:"dataSource,omitempty"`
-	Resources  v1.ResourceRequirements `json:"resources,omitempty"`
-
+type Cluster struct {
 	// Name of cluster to duplicate
 	ClusterName string `json:"clusterName,omitempty"`
 
 	// Specification of new cluster
-	ClusterConfig KubegresSpec `json:"clusterConfig,omitempty"`
+	ClusterSpec KubegresSpec `json:"clusterSpec,omitempty"`
+}
 
-	// TODO: Is this better than using a copy of Kubegres?
-	// ClusterConfig ClusterConfig `json:"clusterConfig,omitempty"`
+type DataSource struct {
+	File    File    `json:"file,omitempty"`
+	Cluster Cluster `json:"cluster,omitempty"`
+}
+
+type KubegresRestoreSpec struct {
+	CustomConfig string                  `json:"customConfig,omitempty"`
+	DataSource   DataSource              `json:"dataSource,omitempty"`
+	Resources    v1.ResourceRequirements `json:"resources,omitempty"`
+	ClusterName  string                  `json:"clusterName,omitempty"`
 }
 
 // ----------------------- STATUS -----------------------------------------

@@ -38,6 +38,13 @@ const (
 	RestoreJobSuffix = "-job"
 )
 
+const (
+	StageDeployingCluster      = "Deploying Kubegres Cluster"
+	StageWaitingForCluster     = "Waiting for Kubegres Cluster to be ready"
+	StageRestoreJobIsRunning   = "Restoring database from snaphot"
+	StageRestoreJobIsCompleted = "Changing Kubegres Cluster replicas"
+)
+
 func (r *KubegresRestoreContext) GetRestoreJobName() string {
 	return r.KubegresRestore.Name + RestoreJobSuffix
 }

@@ -199,6 +199,38 @@ data:
 
     echo "$dt - DB backup completed for Kubegres resource $KUBEGRES_RESOURCE_NAME into file: $backUpFilePath";
 
+  # If you want to create a new Kubegres resource from a restorepoint, this bash scripts restores a
+  # Postgres database into a given destination from a snapshot.
+  #
+  # Assumptions:
+  #   - Name of default database is not equal to the name of database to restore.
+  #   - The snapshot to use contains one database.
+  #
+  # Environment
+  #   POSTGRES_DB: 
+  #   RESTOREPOINT_FILEPATH: 
+  #   BACKUP_TARGET_DB_HOST_NAME: 
+  restore_database.sh: |
+    #!/bin/bash
+    set -e
+
+    dt=$(date '+%d/%m/%Y %H:%M:%S')
+
+    if [ ! -f $RESTOREPOINT_FILEPATH ]; then
+      echo "The specified snapshot '${RESTOREPOINT_FILEPATH}' not found"; 
+    fi
+
+    echo "$dt - Restore of ${POSTGRES_DB} from ${RESTOREPOINT_FILEPATH} has started"
+
+    echo "$dt - Running: pg_restore --no-password -d ${POSTGRES_DB} -h ${BACKUP_TARGET_DB_HOST_NAME} -U postgres --verbose --exit-on-error ${RESTOREPOINT_FILEPATH}"
+    pg_restore --no-password -d ${POSTGRES_DB} -h ${BACKUP_TARGET_DB_HOST_NAME} -U postgres --verbose --exit-on-error ${RESTOREPOINT_FILEPATH}
+
+    if [ $? -ne 0 ]; then
+        echo "Unable to restore the database"
+        exit 1
+    fi
+
+    echo "$dt - DB restored from file ${RESTOREPOINT_FILEPATH} successfully"
 
   # This is the standard Postgres host-based authentication (hba) config applying to Primary and Replica servers.
   # https://www.postgresql.org/docs/current/auth-pg-hba-conf.html
@@ -583,5 +615,64 @@ spec:
             - name: base-config
               mountPath: /etc/pg_hba.conf
               subPath: pg_hba.conf
+`
+RestoreJob = `apiVersion: batch/v1
+kind: Job
+metadata:
+  name: job-restore-mypostgres
+  labels:
+    app: postgres-db
+    replicationRole: none
+    clusterName: mypostgres
+    role: restore
+spec:
+  backoffLimit: 0
+
+  template:
+    spec:
+      restartPolicy: Never
+      
+      volumes:
+        - name: backup-volume
+          persistentVolumeClaim:
+            claimName: toBeReplaced
+        - name: postgres-config
+          configMap:
+            name: toBeReplaced
+            defaultMode: 0777
+
+      containers:
+        - name: postgres-restore
+          image: postgres:latest
+          args: 
+            - sh
+            - -c
+            - /tmp/restore_database.sh
+          
+          volumeMounts:
+            - name: backup-volume
+              mountPath: toBeReplaced
+            - name: postgres-config
+              mountPath: /tmp/restore_database.sh
+              subPath: restore_database.sh
+          
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: toBeReplaced
+                  key: superUserPassword
+            - name: POSTGRES_DB
+              value: toBeReplaced
+            - name: BACKUP_TARGET_DB_HOST_NAME
+              value: toBeReplaced
+            - name: RESTOREPOINT_FILEPATH
+              value: toBeReplaced
+            # - name: POSTGRES_PASSWORD
+            #   valueFrom:
+            #     secretKeyRef:
+            #       name: toBeReplaced
+            #       key: superUserPassword
+
 `
 )

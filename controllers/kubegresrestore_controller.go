@@ -22,13 +22,11 @@ import (
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kubegresv1 "reactive-tech.io/kubegres/api/v1"
-	v1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx/resources"
 )
 
@@ -54,28 +52,14 @@ func (r *KubegresRestoreReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	r.Logger.Info("------------------------------------------")
 	r.Logger.Info("------------------------------------------")
-
-	// Allow Kubernetes to update its system.
-	time.Sleep(1 * time.Second)
+	r.Logger.Info("KUBEGRESRESTORE", "Context", ctx, "Request", req)
 
 	// ### 1. Create restore context
 	// Get KubegresRestore resource
 	restoreJob, err := r.getDeployedKubegresRestoreResource(ctx, req)
 	if err != nil {
-		r.Logger.Info("KubegresRestore resource does not exist")
 		return ctrl.Result{}, nil
 	}
-
-	r.Logger.Info("KubegresRestore", "Job", restoreJob, "Req", req)
-
-	// // Get target Kubegres cluster based on the job spec
-	// targetKubegresCluster, err := r.getDeployedKubegresResource(ctx, req, restoreJob.Spec.ClusterName)
-	// if err != nil {
-	// 	r.Logger.Info("Kubegres resource does not exist")
-	// 	return ctrl.Result{}, nil
-	// }
-
-	// r.Logger.Info("KubegresRestore", "Job", restoreJob, "KubegresCluster", targetKubegresCluster)
 
 	// Get RestoreContext
 	restoreJobContext, err := resources.CreateRestoreJobContext(restoreJob, ctx, r.Logger, r.Client, r.Recorder)
@@ -83,9 +67,12 @@ func (r *KubegresRestoreReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 
-	// ### 2. Deploy cluster if it is not already
+	// ### 2. Check kubegres restore spec
+	// TODO: Implement spec checker.
+
+	// ### 3. Deploy cluster if it is not already
 	if !restoreJobContext.RestoreJobStates.IsClusterDeployed {
-		var kubegresSpec v1.KubegresSpec
+		var kubegresSpec kubegresv1.KubegresSpec
 		restoreFromZero := false // TODO: Get this value from KubegresRestore spec
 		if restoreFromZero {
 			// TODO: Implement createClusterSpec(...)
@@ -97,24 +84,25 @@ func (r *KubegresRestoreReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			}
 		}
 
-		restoreJobContext.LogWrapper.Logger.Info("Step 2", "KubegresRestore", restoreJob, "ClusterSpec", kubegresSpec)
-		// if err := createClusterFromSpec(restoreJobContext, kubegresSpec); err != nil {
-		// 	restoreJobContext.LogWrapper.ErrorEvent("ErrorWhenCreatingNewCluster", err, "Unable to create a new Kubegres cluster", "KubegresSpec", kubegresSpec)
-		// 	return r.returnn(ctrl.Result{}, err, restoreJobContext)
-		// }
+		// restoreJobContext.LogWrapper.Logger.Info("Step 3", "KubegresRestore", restoreJob, "ClusterSpec", kubegresSpec)
+		if err := restoreJobContext.CreateClusterFromSpec(kubegresSpec); err != nil {
+			restoreJobContext.LogWrapper.ErrorEvent("ErrorWhenCreatingNewCluster", err, "Unable to create a new Kubegres cluster", "Name of new cluster", restoreJobContext.KubegresRestoreContext.KubegresRestore.Spec.ClusterName)
+			return r.returnn(ctrl.Result{}, err, restoreJobContext)
+		}
 	}
 
-	// ### 3. Requeue if cluster is not ready
+	// ### 4. Requeue if cluster is not ready
 	if !restoreJobContext.RestoreJobStates.IsClusterReady {
-		restoreJobContext.LogWrapper.Logger.Info("Kubegres cluster not ready yet", "RestoreJob", restoreJobContext.KubegresRestoreContext.KubegresRestore, "Status", restoreJobContext.RestoreStatusWrapper)
+		restoreJobContext.LogWrapper.Logger.Info("Kubegres cluster not ready yet", "State", restoreJobContext.RestoreJobStates)
 		return r.returnn(ctrl.Result{Requeue: true}, nil, restoreJobContext)
 	} else {
-		restoreJobContext.LogWrapper.Logger.Info("Kubegres cluster is ready", "RestoreJob", restoreJobContext.KubegresRestoreContext.KubegresRestore, "Status", restoreJobContext.RestoreStatusWrapper)
+		restoreJobContext.LogWrapper.InfoEvent("KubegresClusterIsReady", "Kubegres cluster is ready")
 	}
 
-	// ### 4. Update restore job status
-
 	// ### 5. Deploy restore job if not already deployed
+	if restoreJobContext.RestoreJobStates.IsJobDeployed {
+		restoreJobContext.RestoreJobCreator.CreateFromSpec()
+	}
 
 	// ### 6. If job is running, requeue and wait
 
@@ -143,26 +131,15 @@ func (r *KubegresRestoreReconciler) returnn(result ctrl.Result,
 }
 
 func (r *KubegresRestoreReconciler) getDeployedKubegresRestoreResource(ctx context.Context, req ctrl.Request) (*kubegresv1.KubegresRestore, error) {
+	// Allow Kubernetes to update its system.
+	time.Sleep(1 * time.Second)
+
 	restoreJob := &kubegresv1.KubegresRestore{}
 	err := r.Client.Get(ctx, req.NamespacedName, restoreJob)
-	if err != nil {
-		return &kubegresv1.KubegresRestore{}, err
+	if err == nil {
+		return restoreJob, nil
 	}
 
-	return restoreJob, nil
-}
-
-func (r *KubegresRestoreReconciler) getDeployedKubegresResource(ctx context.Context, req ctrl.Request, kubegresName string) (*kubegresv1.Kubegres, error) {
-	kubegresNamespacedName := types.NamespacedName{
-		Namespace: req.Namespace,
-		Name:      kubegresName,
-	}
-
-	kubegresResource := &kubegresv1.Kubegres{}
-	err := r.Client.Get(ctx, kubegresNamespacedName, kubegresResource)
-	if err != nil {
-		return &kubegresv1.Kubegres{}, err
-	}
-
-	return kubegresResource, nil
+	r.Logger.Info("KubegresRestore resource does not exist")
+	return &kubegresv1.KubegresRestore{}, err
 }
