@@ -17,14 +17,14 @@ limitations under the License.
 package states
 
 import (
-	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
-	core "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	v1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"reactive-tech.io/kubegres/controllers/ctx/log"
+	"reactive-tech.io/kubegres/controllers/ctx/status"
+	"reactive-tech.io/kubegres/controllers/states/statefulset"
 )
 
 // TODO: Refactor
@@ -33,14 +33,12 @@ type RestoreJobStates struct {
 
 	IsClusterDeployed bool
 	IsClusterReady    bool
-	// Cluster           *v1.Kubegres
 
 	IsJobDeployed  bool
 	IsJobRunning   bool
 	IsJobCompleted bool
-	// Job            batchv1.Job
 
-	Stage string
+	// Stage string
 }
 
 func LoadRestoreJobStates(kubegresRestoreContext ctx.KubegresRestoreContext) (RestoreJobStates, error) {
@@ -68,7 +66,6 @@ func (r *RestoreJobStates) loadJobStates() error {
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			r.IsJobDeployed = false
-			r.Stage = "" //TODO: Replace with correct stage (constant)
 			return nil
 		} else {
 			r.kubegresRestoreContext.Log.ErrorEvent("RestoreJobLoadingErr", err, "Unable to load deployed restore job", "KubegresRestore Name", jobKey)
@@ -100,7 +97,8 @@ func (r *RestoreJobStates) loadClusterStates() error {
 		if apierrors.IsNotFound(err) {
 			r.IsClusterDeployed = false
 			r.IsClusterReady = false
-			// r.Stage = "Cluster not deployed yet" //TODO: Replace with correct stage (constant)
+
+			r.kubegresRestoreContext.Status.SetCurrentStage(ctx.StageDeployingCluster)
 			return nil
 		} else {
 			r.kubegresRestoreContext.Log.ErrorEvent("KubegresClusterLoadingErr", err, "Unable to load deployed kubegres cluster", "KubegresCluster", clusterKey)
@@ -108,88 +106,39 @@ func (r *RestoreJobStates) loadClusterStates() error {
 		}
 	}
 
-	isStatefulSetReady, err := r.isStatefulSetReady()
+	kubegresLogwrapper := log.LogWrapper[*v1.Kubegres]{Resource: cluster, Logger: r.kubegresRestoreContext.Log.Logger, Recorder: r.kubegresRestoreContext.Log.Recorder}
+	kubegresStatusWrapper := &status.KubegresStatusWrapper{
+		Kubegres: cluster,
+		Ctx:      r.kubegresRestoreContext.Ctx,
+		Log:      kubegresLogwrapper,
+		Client:   r.kubegresRestoreContext.Client,
+	}
+	kubegresContext := ctx.KubegresContext{
+		Kubegres: cluster,
+		Status:   kubegresStatusWrapper,
+		Ctx:      r.kubegresRestoreContext.Ctx,
+		Log:      kubegresLogwrapper,
+		Client:   r.kubegresRestoreContext.Client,
+	}
+
+	statefulSetStates, err := statefulset.LoadStatefulSetsStates(kubegresContext)
 	if err != nil {
-		r.kubegresRestoreContext.Log.ErrorEvent("StatefulSetInKubegresLoadingErr", err, "Unable to load any deployed StatefulSets in Kubegres cluster", "Kubegres name", r.kubegresRestoreContext.KubegresRestore.Spec.ClusterName)
+		r.kubegresRestoreContext.Log.ErrorEvent("StatefulSetInKubegresLoadingErr", err, "Unable to load state of deployed StatefulSets in Kubegres cluster", "Kubegres name", r.kubegresRestoreContext.KubegresRestore.Spec.ClusterName)
 		return err
 	}
 
-	isPrimaryServiceReady, err := r.isPrimaryServiceReady()
+	serviceStates, err := loadServicesStates(kubegresContext)
 	if err != nil {
-		r.kubegresRestoreContext.Log.ErrorEvent("PrimaryServiceInKubegresLoadingErr", err, "Unable to load any deployed primary service in Kubegres cluster", "Kubegres name", r.kubegresRestoreContext.KubegresRestore.Spec.ClusterName)
+		r.kubegresRestoreContext.Log.ErrorEvent("ServiceInKubegresLoadingErr", err, "Unable to load state of deployed service in Kubegres cluster", "Kubegres name", r.kubegresRestoreContext.KubegresRestore.Spec.ClusterName)
 		return err
 	}
 
 	r.IsClusterDeployed = true
-	r.IsClusterReady = isStatefulSetReady && isPrimaryServiceReady
+	r.IsClusterReady = statefulSetStates.Primary.IsReady && serviceStates.Primary.IsDeployed
 
-	if err != nil {
-		return err
+	if !r.IsClusterReady {
+		r.kubegresRestoreContext.Status.SetCurrentStage(ctx.StageWaitingForCluster)
 	}
-
-	// if !r.IsClusterReady {
-	// 	r.Stage = "Cluster is deploying" //TODO: Replace with correct stage (constant)
-	// }
 
 	return nil
-}
-
-func (r *RestoreJobStates) isStatefulSetReady() (bool, error) {
-	statefulSets, err := r.getStatefulSetsOwnedByKubegres()
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			return false, nil
-		}
-		return false, err
-	}
-
-	if len(statefulSets.Items) == 0 {
-		return false, nil
-	}
-
-	isClusterReady := true
-	for _, statefulSet := range statefulSets.Items {
-		if statefulSet.Status.ReadyReplicas < 1 {
-			isClusterReady = false
-			break
-		}
-	}
-	return isClusterReady, nil
-}
-
-func (r *RestoreJobStates) isPrimaryServiceReady() (bool, error) {
-	_, err := r.getPrimaryServiceOwnedByKubegres()
-
-	if err == nil {
-		return true, nil
-	}
-
-	if apierrors.IsNotFound(err) {
-		return false, nil
-	}
-	return false, err
-}
-
-func (r *RestoreJobStates) getStatefulSetsOwnedByKubegres() (*apps.StatefulSetList, error) {
-	clusterName := r.kubegresRestoreContext.KubegresRestore.Spec.ClusterName
-	list := &apps.StatefulSetList{}
-	opts := []client.ListOption{
-		client.InNamespace(r.kubegresRestoreContext.KubegresRestore.Namespace),
-		client.MatchingFields{ctx.DeploymentOwnerKey: clusterName},
-	}
-	err := r.kubegresRestoreContext.Client.List(r.kubegresRestoreContext.Ctx, list, opts...)
-
-	return list, err
-}
-
-func (r *RestoreJobStates) getPrimaryServiceOwnedByKubegres() (*core.Service, error) {
-	serviceName := r.kubegresRestoreContext.KubegresRestore.Spec.ClusterName
-	service := &core.Service{}
-	serviceKey := types.NamespacedName{
-		Namespace: r.kubegresRestoreContext.KubegresRestore.Namespace,
-		Name:      serviceName,
-	}
-	err := r.kubegresRestoreContext.Client.Get(r.kubegresRestoreContext.Ctx, serviceKey, service)
-
-	return service, err
 }

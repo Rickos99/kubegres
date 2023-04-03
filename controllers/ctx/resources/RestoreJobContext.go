@@ -9,7 +9,7 @@ import (
 	"reactive-tech.io/kubegres/controllers/ctx"
 	"reactive-tech.io/kubegres/controllers/ctx/log"
 	"reactive-tech.io/kubegres/controllers/ctx/status"
-	"reactive-tech.io/kubegres/controllers/spec/creator"
+	"reactive-tech.io/kubegres/controllers/spec/enforcer"
 	"reactive-tech.io/kubegres/controllers/states"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -17,12 +17,14 @@ import (
 type RestoreJobContext struct {
 	LogWrapper             log.LogWrapper[*v1.KubegresRestore]
 	KubegresRestoreContext ctx.KubegresRestoreContext
-	RestoreStatusWrapper   *status.RestoreStatusWrapper
-	RestoreJobStates       states.RestoreJobStates
-	RestoreJobCreator      creator.RestoreJobCreator
+	// KubegresContext        ctx.KubegresContext
+	RestoreStatusWrapper *status.RestoreStatusWrapper
+	RestoreJobStates     states.RestoreJobStates
+	RestoreJobEnforcer   enforcer.JobSpecEnforcer
 }
 
 func CreateRestoreJobContext(kubegresRestore *v1.KubegresRestore,
+	// kubegres *v1.Kubegres,
 	ctx2 context.Context,
 	logger logr.Logger,
 	client client.Client,
@@ -44,7 +46,22 @@ func CreateRestoreJobContext(kubegresRestore *v1.KubegresRestore,
 		Log:             rc.LogWrapper,
 		Client:          client,
 	}
-	rc.RestoreJobCreator = *creator.CreateRestoreJobCreator(rc.KubegresRestoreContext, rc.LogWrapper)
+
+	// kubegresLogwrapper := log.LogWrapper[*v1.Kubegres]{Resource: kubegres, Logger: logger, Recorder: recorder}
+	// kubegresStatusWrapper := &status.KubegresStatusWrapper{
+	// 	Kubegres: kubegres,
+	// 	Ctx:      ctx2,
+	// 	Log:      kubegresLogwrapper,
+	// 	Client:   client,
+	// }
+	// rc.KubegresContext = ctx.KubegresContext{
+	// 	Kubegres: kubegres,
+	// 	Status:   kubegresStatusWrapper,
+	// 	Ctx:      ctx2,
+	// 	Log:      kubegresLogwrapper,
+	// 	Client:   client,
+	// }
+	rc.RestoreJobEnforcer = enforcer.CreateJobSpecEnforcer(rc.KubegresRestoreContext)
 
 	var err error
 	rc.RestoreJobStates, err = states.LoadRestoreJobStates(rc.KubegresRestoreContext)

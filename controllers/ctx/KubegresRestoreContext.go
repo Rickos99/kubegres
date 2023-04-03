@@ -41,8 +41,10 @@ const (
 const (
 	StageDeployingCluster      = "Deploying Kubegres Cluster"
 	StageWaitingForCluster     = "Waiting for Kubegres Cluster to be ready"
+	StageRestoreJobIsDeploying = "Waiting for restore job to deploy"
 	StageRestoreJobIsRunning   = "Restoring database from snaphot"
 	StageRestoreJobIsCompleted = "Changing Kubegres Cluster replicas"
+	StageRestoreJobFailed      = "Restorejob has stopped due to fatal error"
 )
 
 func (r *KubegresRestoreContext) GetRestoreJobName() string {
@@ -54,4 +56,8 @@ func (r *KubegresRestoreContext) GetNamespacesresourceName(name string) types.Na
 		Namespace: r.KubegresRestore.Namespace,
 		Name:      name,
 	}
+}
+
+func (r *KubegresRestoreContext) ShouldRestoreFromExistingCluster() bool {
+	return r.KubegresRestore.Spec.DataSource.Cluster.ClusterName != ""
 }
