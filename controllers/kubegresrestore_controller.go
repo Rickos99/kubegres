@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -61,13 +60,6 @@ func (r *KubegresRestoreReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, nil
 	}
 
-	// // Get target Kubegres cluster based on the job spec
-	// targetKubegresCluster, err := r.getDeployedKubegresResource(ctx, req, restoreJob.Spec.ClusterName)
-	// if err != nil {
-	// 	r.Logger.Info("Kubegres resource does not exist")
-	// 	return ctrl.Result{}, nil
-	// }
-
 	// Get RestoreContext
 	restoreJobContext, err := resources.CreateRestoreJobContext(restoreJob, ctx, r.Logger, r.Client, r.Recorder)
 	if err != nil {
@@ -77,56 +69,10 @@ func (r *KubegresRestoreReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	// ### 2. Check kubegres restore spec
 	// TODO: Implement spec checker.
 
-	// ### 3. Deploy cluster if it is not already
-	var kubegresSpec kubegresv1.KubegresSpec
-	if !restoreJobContext.RestoreJobStates.IsClusterDeployed {
-		restoreFromExistingCluster := restoreJobContext.KubegresRestoreContext.ShouldRestoreFromExistingCluster() // TODO: Get this value from KubegresRestore spec
-		if restoreFromExistingCluster {
-			if kubegresSpec, err = restoreJobContext.CreateKubegresSpecFromExistingCluster(); err != nil {
-				restoreJobContext.LogWrapper.ErrorEvent("ErrorWhenCopyingClusterSpec", err, "Unable to copy spec of source Kubegres cluster")
-				return r.returnn(ctrl.Result{}, err, restoreJobContext)
-			}
-		} else {
-			// TODO: Implement createClusterSpec(...)
-			//createClusterSpec(restoreJobContext.KubegresRestoreContext.KubegresRestore.Spec, kubegres)
-			return r.returnn(ctrl.Result{}, errors.New("not implemented yet"), restoreJobContext)
-		}
-
-		// restoreJobContext.LogWrapper.Logger.Info("Step 3", "KubegresRestore", restoreJob, "ClusterSpec", kubegresSpec)
-		if err := restoreJobContext.CreateClusterFromSpec(kubegresSpec); err != nil {
-			restoreJobContext.LogWrapper.ErrorEvent("ErrorWhenCreatingNewCluster", err, "Unable to create a new Kubegres cluster", "Name of new cluster", restoreJobContext.KubegresRestoreContext.KubegresRestore.Spec.ClusterName)
-			return r.returnn(ctrl.Result{}, err, restoreJobContext)
-		}
-	}
-
-	// ### 4. Requeue if cluster is not ready
-	if !restoreJobContext.RestoreJobStates.IsClusterReady {
-		restoreJobContext.LogWrapper.Logger.Info("Kubegres cluster not ready yet", "State", restoreJobContext.RestoreJobStates)
-		return r.returnn(ctrl.Result{Requeue: true}, nil, restoreJobContext)
-	} else {
-		restoreJobContext.LogWrapper.InfoEvent("KubegresClusterIsReady", "Kubegres cluster is ready")
-	}
-
 	restoreJobContext.LogWrapper.Logger.Info("KUBEGRESRESTORE STATES", "state", restoreJobContext.RestoreJobStates)
 
-	// ### 5. Deploy restore job if not already deployed
-	if !restoreJobContext.RestoreJobStates.IsJobDeployed {
-		err := restoreJobContext.RestoreJobEnforcer.Enforce(kubegresSpec)
-		if err != nil {
-			restoreJobContext.LogWrapper.ErrorEvent("ErrorWhenEnforcingRestoreJob", err, "Unable to enforce restore job")
-			return r.returnn(ctrl.Result{}, err, restoreJobContext)
-		}
-		return r.returnn(ctrl.Result{Requeue: true}, nil, restoreJobContext)
-	}
-
-	// ### 6. If job is running, requeue and wait
-	if restoreJobContext.RestoreJobStates.IsJobRunning {
-		return r.returnn(ctrl.Result{Requeue: true}, nil, restoreJobContext)
-	}
-
-	// ### 7. If job is completed, set replicas and update the cluster spec.
-
-	return ctrl.Result{}, nil
+	// ### 3. Enforce resources
+	return r.returnn(ctrl.Result{}, restoreJobContext.ResourcesCountSpecEnforcer.EnforceSpec(), restoreJobContext)
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -161,18 +107,3 @@ func (r *KubegresRestoreReconciler) getDeployedKubegresRestoreResource(ctx conte
 	r.Logger.Info("KubegresRestore resource does not exist")
 	return &kubegresv1.KubegresRestore{}, err
 }
-
-// func (r *KubegresRestoreReconciler) getDeployedKubegresResource(ctx context.Context, req ctrl.Request, kubegresName string) (*kubegresv1.Kubegres, error) {
-// 	kubegresNamespacedName := types.NamespacedName{
-// 		Namespace: req.Namespace,
-// 		Name:      kubegresName,
-// 	}
-
-// 	kubegresResource := &kubegresv1.Kubegres{}
-// 	err := r.Client.Get(ctx, kubegresNamespacedName, kubegresResource)
-// 	if err != nil {
-// 		return &kubegresv1.Kubegres{}, err
-// 	}
-
-// 	return kubegresResource, nil
-// }

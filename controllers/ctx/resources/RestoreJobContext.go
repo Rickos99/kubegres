@@ -2,6 +2,7 @@ package resources
 
 import (
 	"context"
+	"errors"
 
 	"github.com/go-logr/logr"
 	"k8s.io/client-go/tools/record"
@@ -9,7 +10,7 @@ import (
 	"reactive-tech.io/kubegres/controllers/ctx"
 	"reactive-tech.io/kubegres/controllers/ctx/log"
 	"reactive-tech.io/kubegres/controllers/ctx/status"
-	"reactive-tech.io/kubegres/controllers/spec/enforcer"
+	"reactive-tech.io/kubegres/controllers/spec/enforcer/resources_count_spec"
 	"reactive-tech.io/kubegres/controllers/states"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -17,14 +18,15 @@ import (
 type RestoreJobContext struct {
 	LogWrapper             log.LogWrapper[*v1.KubegresRestore]
 	KubegresRestoreContext ctx.KubegresRestoreContext
-	// KubegresContext        ctx.KubegresContext
-	RestoreStatusWrapper *status.RestoreStatusWrapper
-	RestoreJobStates     states.RestoreJobStates
-	RestoreJobEnforcer   enforcer.JobSpecEnforcer
+	RestoreStatusWrapper   *status.RestoreStatusWrapper
+	RestoreJobStates       states.RestoreJobStates
+
+	ResourcesCountSpecEnforcer resources_count_spec.ResourcesCountSpecEnforcer
+	kubegresCountSpecEnforcer  resources_count_spec.KubegresCountSpecEnforcer
+	jobCountSpecEnforcer       resources_count_spec.JobCountSpecEnforcer
 }
 
 func CreateRestoreJobContext(kubegresRestore *v1.KubegresRestore,
-	// kubegres *v1.Kubegres,
 	ctx2 context.Context,
 	logger logr.Logger,
 	client client.Client,
@@ -47,32 +49,42 @@ func CreateRestoreJobContext(kubegresRestore *v1.KubegresRestore,
 		Client:          client,
 	}
 
-	// kubegresLogwrapper := log.LogWrapper[*v1.Kubegres]{Resource: kubegres, Logger: logger, Recorder: recorder}
-	// kubegresStatusWrapper := &status.KubegresStatusWrapper{
-	// 	Kubegres: kubegres,
-	// 	Ctx:      ctx2,
-	// 	Log:      kubegresLogwrapper,
-	// 	Client:   client,
-	// }
-	// rc.KubegresContext = ctx.KubegresContext{
-	// 	Kubegres: kubegres,
-	// 	Status:   kubegresStatusWrapper,
-	// 	Ctx:      ctx2,
-	// 	Log:      kubegresLogwrapper,
-	// 	Client:   client,
-	// }
-	rc.RestoreJobEnforcer = enforcer.CreateJobSpecEnforcer(rc.KubegresRestoreContext)
-
 	var err error
 	rc.RestoreJobStates, err = states.LoadRestoreJobStates(rc.KubegresRestoreContext)
 	if err != nil {
 		return rc, err
 	}
 
+	kubegresSpec, err := rc.getKubegresSpec()
+	if err != nil {
+		rc.LogWrapper.ErrorEvent("GetKubegresSpecError", err, "Unable to get kubegres spec.", "Get Kubegres spec from existing cluster", rc.KubegresRestoreContext.ShouldRestoreFromExistingCluster())
+		return rc, err
+	}
+
+	rc.addResourcesCountSpecEnforcers(kubegresSpec)
+
 	return rc, nil
 }
 
-func (r *RestoreJobContext) CreateKubegresSpecFromExistingCluster() (v1.KubegresSpec, error) {
+func (r *RestoreJobContext) addResourcesCountSpecEnforcers(kubegresSpec v1.KubegresSpec) {
+	r.ResourcesCountSpecEnforcer = resources_count_spec.ResourcesCountSpecEnforcer{}
+	r.kubegresCountSpecEnforcer = resources_count_spec.CreateKubegresCountSpecEnforcer(r.KubegresRestoreContext, r.RestoreJobStates, kubegresSpec)
+	r.jobCountSpecEnforcer = resources_count_spec.CreateJobCountSpecEnforcer(r.KubegresRestoreContext, r.RestoreJobStates, kubegresSpec)
+
+	r.ResourcesCountSpecEnforcer = resources_count_spec.ResourcesCountSpecEnforcer{}
+	r.ResourcesCountSpecEnforcer.AddSpecEnforcer(&r.kubegresCountSpecEnforcer)
+	r.ResourcesCountSpecEnforcer.AddSpecEnforcer(&r.jobCountSpecEnforcer)
+}
+
+func (r *RestoreJobContext) getKubegresSpec() (v1.KubegresSpec, error) {
+	if r.KubegresRestoreContext.ShouldRestoreFromExistingCluster() {
+		return r.getKubegresSpecFromExistingCluster()
+	} else {
+		return v1.KubegresSpec{}, errors.New("not implemented yet")
+	}
+}
+
+func (r *RestoreJobContext) getKubegresSpecFromExistingCluster() (v1.KubegresSpec, error) {
 	cluster := &v1.Kubegres{}
 	clusterKey := r.KubegresRestoreContext.GetNamespacesresourceName(r.KubegresRestoreContext.KubegresRestore.Spec.DataSource.Cluster.ClusterName)
 	err := r.KubegresRestoreContext.Client.Get(r.KubegresRestoreContext.Ctx, clusterKey, cluster)
@@ -81,23 +93,4 @@ func (r *RestoreJobContext) CreateKubegresSpecFromExistingCluster() (v1.Kubegres
 	}
 
 	return cluster.Spec, nil
-}
-
-func (r *RestoreJobContext) CreateClusterFromSpec(kubegresSpec v1.KubegresSpec) error {
-	var replicas int32 = 1
-	kubegres := &v1.Kubegres{}
-	kubegres.Spec = kubegresSpec
-	kubegres.ObjectMeta.Name = r.KubegresRestoreContext.KubegresRestore.Spec.ClusterName
-	kubegres.ObjectMeta.Namespace = r.KubegresRestoreContext.KubegresRestore.Namespace
-	kubegres.Spec.Replicas = &replicas
-	kubegres.Spec.Resources = r.KubegresRestoreContext.KubegresRestore.Spec.Resources
-
-	err := r.KubegresRestoreContext.Client.Create(r.KubegresRestoreContext.Ctx, kubegres)
-	if err != nil {
-		return err
-	}
-
-	r.KubegresRestoreContext.Log.InfoEvent("KubegresClusterCreated", "Created a new kubegres cluster", "Cluster name", kubegres.Name)
-
-	return nil
 }
