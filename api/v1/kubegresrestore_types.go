@@ -24,8 +24,9 @@ import (
 // ----------------------- SPEC -------------------------------------------
 
 type File struct {
-	PvcName  string `json:"pvcName,omitempty"`
-	Snapshot string `json:"snapshot,omitempty"`
+	PvcName   string `json:"pvcName,omitempty"`
+	Mountpath string `json:"mountPath,omitempty"`
+	Snapshot  string `json:"snapshot,omitempty"`
 }
 
 type Cluster struct {

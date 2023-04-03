@@ -3935,6 +3935,8 @@ spec:
                     type: object
                   file:
                     properties:
+                      mountPath:
+                        type: string
                       pvcName:
                         type: string
                       snapshot:
