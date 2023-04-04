@@ -35,7 +35,8 @@ type KubegresRestoreContext struct {
 }
 
 const (
-	RestoreJobSuffix = "-job"
+	RestoreJobSuffix              = "-job"
+	RestoreJobKubegresTargetField = ".spec.clusterName"
 )
 
 const (

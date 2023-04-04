@@ -21,12 +21,18 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	kubegresv1 "reactive-tech.io/kubegres/api/v1"
+	"reactive-tech.io/kubegres/controllers/ctx"
 	"reactive-tech.io/kubegres/controllers/ctx/resources"
 )
 
@@ -77,8 +83,24 @@ func (r *KubegresRestoreReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *KubegresRestoreReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &kubegresv1.KubegresRestore{}, ctx.RestoreJobKubegresTargetField, func(rawObj client.Object) []string {
+		kubegresRestore := rawObj.(*kubegresv1.KubegresRestore)
+
+		if kubegresRestore.Spec.ClusterName == "" {
+			return nil
+		}
+
+		return []string{kubegresRestore.Spec.ClusterName}
+	}); err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kubegresv1.KubegresRestore{}).
+		Watches(
+			&source.Kind{Type: &kubegresv1.Kubegres{}},
+			handler.EnqueueRequestsFromMapFunc(r.findObjectsForKubegres),
+		).
 		Complete(r)
 }
 
@@ -106,4 +128,30 @@ func (r *KubegresRestoreReconciler) getDeployedKubegresRestoreResource(ctx conte
 
 	r.Logger.Info("KubegresRestore resource does not exist")
 	return &kubegresv1.KubegresRestore{}, err
+}
+
+func (r *KubegresRestoreReconciler) findObjectsForKubegres(kubegres client.Object) []reconcile.Request {
+	kubegresRestoreList := &kubegresv1.KubegresRestoreList{}
+	listOps := &client.ListOptions{
+		FieldSelector: fields.OneTermEqualSelector(ctx.RestoreJobKubegresTargetField, kubegres.GetName()),
+		Namespace:     kubegres.GetNamespace(),
+	}
+	err := r.Client.List(context.Background(), kubegresRestoreList, listOps)
+	if err != nil {
+		r.Logger.Error(err, "Unable to list all kubegres restore resources", "Kubegres", kubegres.GetName())
+		return []reconcile.Request{}
+	}
+
+	requests := make([]reconcile.Request, len(kubegresRestoreList.Items))
+	for i, item := range kubegresRestoreList.Items {
+		requests[i] = reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      item.GetName(),
+				Namespace: item.GetNamespace(),
+			},
+		}
+	}
+
+	r.Logger.Info("KUBEGRES UPDATE", "Kubegres name", kubegres.GetName(), "Requests", requests)
+	return requests
 }
