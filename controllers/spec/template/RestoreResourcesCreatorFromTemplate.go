@@ -5,6 +5,7 @@ import (
 
 	batchv1 "k8s.io/api/batch/v1"
 	core "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	kubegresv1 "reactive-tech.io/kubegres/api/v1"
@@ -32,7 +33,7 @@ func (r *RestoreJobResourcesCreatorTemplate) CreateRestoreJob(kubegresSpec kubeg
 
 	restoreJobTemplate.Name = r.kubegresRestoreContext.GetRestoreJobName()
 	restoreJobTemplate.Namespace = r.kubegresRestoreContext.KubegresRestore.Namespace
-	// restoreJobTemplate.OwnerReferences = r.getOwnerReferences()
+	restoreJobTemplate.OwnerReferences = r.getOwnerReference()
 
 	restoreJobTemplate.Spec.Template.Spec.Volumes[0].PersistentVolumeClaim.ClaimName = restoreSpec.DataSource.File.PvcName
 	if r.kubegresRestoreContext.KubegresRestore.Spec.CustomConfig != "" {
@@ -58,6 +59,10 @@ func (r *RestoreJobResourcesCreatorTemplate) getKubegresEnvVar(envName string, k
 		}
 	}
 	return core.EnvVar{}
+}
+
+func (r *RestoreJobResourcesCreatorTemplate) getOwnerReference() []metav1.OwnerReference {
+	return []metav1.OwnerReference{*metav1.NewControllerRef(r.kubegresRestoreContext.KubegresRestore, kubegresv1.GroupVersion.WithKind(ctx.KindKubegresRestore))}
 }
 
 func (r *RestoreJobResourcesCreatorTemplate) loadRestoreJobFromTemplate() (restoreTemplate batchv1.Job, err error) {

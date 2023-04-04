@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -101,6 +102,7 @@ func (r *KubegresRestoreReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&source.Kind{Type: &kubegresv1.Kubegres{}},
 			handler.EnqueueRequestsFromMapFunc(r.findObjectsForKubegres),
 		).
+		Owns(&batchv1.Job{}).
 		Complete(r)
 }
 
