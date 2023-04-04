@@ -41,6 +41,11 @@ func (r *KubegresCountSpecEnforcer) EnforceSpec() error {
 	if !r.isClusterDeployed() {
 		return r.deployKubegres()
 	}
+
+	if r.isClusterDeployed() && r.isJobCompleted() && r.kubegresHasReplicas() {
+		return r.addReplicasToKubegres()
+	}
+
 	return nil
 }
 
@@ -64,6 +69,29 @@ func (r *KubegresCountSpecEnforcer) deployKubegres() error {
 	return nil
 }
 
+func (r *KubegresCountSpecEnforcer) addReplicasToKubegres() error {
+	kubegres := r.restoreStates.Cluster
+	kubegres.Spec.Replicas = r.kubegresRestoreContext.KubegresRestore.Spec.DataSource.Cluster.ClusterSpec.Replicas
+
+	err := r.kubegresRestoreContext.Client.Update(r.kubegresRestoreContext.Ctx, kubegres)
+	if err != nil {
+		r.kubegresRestoreContext.Log.ErrorEvent("KubegresScaleErr", err, "Unable to scale kubegres resource.")
+		return err
+	}
+
+	r.kubegresRestoreContext.Log.InfoEvent("KubegresReplicasAdded", "Added replicas to kubegres resource", "Kubegres name", kubegres.Name)
+	return nil
+}
+
 func (r *KubegresCountSpecEnforcer) isClusterDeployed() bool {
 	return r.restoreStates.IsClusterDeployed
+}
+
+func (r *KubegresCountSpecEnforcer) isJobCompleted() bool {
+	return r.restoreStates.IsJobCompleted
+}
+
+func (r *KubegresCountSpecEnforcer) kubegresHasReplicas() bool {
+	// TODO: Return number of replicas instead
+	return r.kubegresRestoreContext.KubegresRestore.Spec.DataSource.Cluster.ClusterSpec.Replicas != nil
 }

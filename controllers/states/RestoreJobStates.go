@@ -17,6 +17,8 @@ limitations under the License.
 package states
 
 import (
+	"errors"
+
 	batchv1 "k8s.io/api/batch/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -33,6 +35,7 @@ type RestoreJobStates struct {
 
 	IsClusterDeployed bool
 	IsClusterReady    bool
+	Cluster           *v1.Kubegres
 
 	IsJobDeployed  bool
 	IsJobRunning   bool
@@ -75,24 +78,34 @@ func (r *RestoreJobStates) loadJobStates() error {
 
 	r.kubegresRestoreContext.Log.WithValues("JobStatus", restoreJob.Status)
 
-	jobIsRunnning := restoreJob.Status.Active != 0     // TODO: Verify that only one Pod is created
-	jobHasSucceded := restoreJob.Status.Succeeded != 0 // TODO: Verify that only one Pod is created
+	jobIsRunnning := restoreJob.Status.Active != 0
+	jobHasSucceded := restoreJob.Status.Succeeded != 0
 
 	r.IsJobDeployed = true
 	r.IsJobRunning = jobIsRunnning
 	r.IsJobCompleted = !jobIsRunnning && jobHasSucceded
-	// r.Stage = "" //TODO: Replace with correct stage (constant)
+
+	r.kubegresRestoreContext.Status.SetIsCompleted(r.IsJobCompleted)
+
+	if r.IsJobRunning {
+		r.kubegresRestoreContext.Status.SetCurrentStage(ctx.StageRestoreJobIsRunning)
+	} else if r.IsJobCompleted {
+		r.kubegresRestoreContext.Status.SetCurrentStage(ctx.StageRestoreJobIsCompleted)
+	} else if r.IsJobDeployed && !r.IsJobRunning && !r.IsJobCompleted {
+		r.kubegresRestoreContext.Status.SetCurrentStage(ctx.StageRestoreJobFailed)
+		r.kubegresRestoreContext.Log.ErrorEvent("RestoreJobFailed", errors.New("unable to complete restore job"), "Unable to complete restore job", "Name of job", restoreJob.Name)
+	}
 
 	return nil
 }
 
 func (r *RestoreJobStates) loadClusterStates() error {
-	cluster := &v1.Kubegres{}
+	r.Cluster = &v1.Kubegres{}
 	clusterKey := types.NamespacedName{
 		Namespace: r.kubegresRestoreContext.KubegresRestore.Namespace,
 		Name:      r.kubegresRestoreContext.KubegresRestore.Spec.ClusterName,
 	}
-	err := r.kubegresRestoreContext.Client.Get(r.kubegresRestoreContext.Ctx, clusterKey, cluster)
+	err := r.kubegresRestoreContext.Client.Get(r.kubegresRestoreContext.Ctx, clusterKey, r.Cluster)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			r.IsClusterDeployed = false
@@ -106,15 +119,15 @@ func (r *RestoreJobStates) loadClusterStates() error {
 		}
 	}
 
-	kubegresLogwrapper := log.LogWrapper[*v1.Kubegres]{Resource: cluster, Logger: r.kubegresRestoreContext.Log.Logger, Recorder: r.kubegresRestoreContext.Log.Recorder}
+	kubegresLogwrapper := log.LogWrapper[*v1.Kubegres]{Resource: r.Cluster, Logger: r.kubegresRestoreContext.Log.Logger, Recorder: r.kubegresRestoreContext.Log.Recorder}
 	kubegresStatusWrapper := &status.KubegresStatusWrapper{
-		Kubegres: cluster,
+		Kubegres: r.Cluster,
 		Ctx:      r.kubegresRestoreContext.Ctx,
 		Log:      kubegresLogwrapper,
 		Client:   r.kubegresRestoreContext.Client,
 	}
 	kubegresContext := ctx.KubegresContext{
-		Kubegres: cluster,
+		Kubegres: r.Cluster,
 		Status:   kubegresStatusWrapper,
 		Ctx:      r.kubegresRestoreContext.Ctx,
 		Log:      kubegresLogwrapper,
