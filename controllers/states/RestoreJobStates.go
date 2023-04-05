@@ -17,141 +17,170 @@ limitations under the License.
 package states
 
 import (
-	"errors"
+	"strconv"
 
 	batchv1 "k8s.io/api/batch/v1"
+	core "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	v1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
-	"reactive-tech.io/kubegres/controllers/ctx/log"
-	"reactive-tech.io/kubegres/controllers/ctx/status"
-	"reactive-tech.io/kubegres/controllers/states/statefulset"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// TODO: Refactor
+type JobPhase string
+
+const (
+	JobPending  JobPhase = "Pending"
+	JobRunning  JobPhase = "Running"
+	JobSucceded JobPhase = "Succeded"
+	JobFailed   JobPhase = "Failed"
+)
+
 type RestoreJobStates struct {
 	kubegresRestoreContext ctx.KubegresRestoreContext
 
-	IsClusterDeployed bool
-	IsClusterReady    bool
-	Cluster           *v1.Kubegres
+	IsJobDeployed bool
+	IsPvcDeployed bool
+	JobPhase      JobPhase
 
-	IsJobDeployed  bool
-	IsJobRunning   bool
-	IsJobCompleted bool
-
-	// Stage string
+	Job *batchv1.Job
 }
 
-func LoadRestoreJobStates(kubegresRestoreContext ctx.KubegresRestoreContext) (RestoreJobStates, error) {
+func loadRestoreJobStates(kubegresRestoreContext ctx.KubegresRestoreContext) (RestoreJobStates, error) {
 	restoreJobStates := RestoreJobStates{kubegresRestoreContext: kubegresRestoreContext}
 
-	if err := restoreJobStates.loadClusterStates(); err != nil {
-		return restoreJobStates, err
-	}
-
-	if err := restoreJobStates.loadJobStates(); err != nil {
+	if err := restoreJobStates.loadStates(); err != nil {
 		return restoreJobStates, err
 	}
 
 	return restoreJobStates, nil
 }
 
-func (r *RestoreJobStates) loadJobStates() error {
-	restoreJob := &batchv1.Job{}
-	jobKey := types.NamespacedName{
-		Namespace: r.kubegresRestoreContext.KubegresRestore.Namespace,
-		Name:      r.kubegresRestoreContext.GetRestoreJobName(),
-	}
-	err := r.kubegresRestoreContext.Client.Get(r.kubegresRestoreContext.Ctx, jobKey, restoreJob)
-
+func (r *RestoreJobStates) loadStates() (err error) {
+	r.Job, err = r.getRestoreJobResource()
 	if err != nil {
-		if apierrors.IsNotFound(err) {
-			r.IsJobDeployed = false
-			return nil
-		} else {
-			r.kubegresRestoreContext.Log.ErrorEvent("RestoreJobLoadingErr", err, "Unable to load deployed restore job", "KubegresRestore Name", jobKey)
-			return err
-		}
+		return err
 	}
 
-	r.kubegresRestoreContext.Log.WithValues("JobStatus", restoreJob.Status)
+	pvc, err := r.getPvcResource()
+	if err != nil {
+		return err
+	}
 
-	jobIsRunnning := restoreJob.Status.Active != 0
-	jobHasSucceded := restoreJob.Status.Succeeded != 0
+	r.IsPvcDeployed = pvc.Name != ""
+
+	if r.Job.Name == "" {
+		r.IsJobDeployed = false
+		r.JobPhase = JobPending
+
+		return nil
+	}
 
 	r.IsJobDeployed = true
-	r.IsJobRunning = jobIsRunnning
-	r.IsJobCompleted = !jobIsRunnning && jobHasSucceded
 
-	r.kubegresRestoreContext.Status.SetIsCompleted(r.IsJobCompleted)
+	jobIsRunnning := r.Job.Status.Active != 0
+	jobHasSucceded := r.Job.Status.Succeeded != 0
+	jobHasFailed := r.Job.Status.Failed != 0
 
-	if r.IsJobRunning {
+	if jobIsRunnning {
+		r.JobPhase = JobRunning
+		r.kubegresRestoreContext.Status.SetIsCompleted(false)
 		r.kubegresRestoreContext.Status.SetCurrentStage(ctx.StageRestoreJobIsRunning)
-	} else if r.IsJobCompleted {
+	} else if jobHasSucceded {
+		r.JobPhase = JobSucceded
+
+		if !r.kubegresRestoreContext.Status.GetIsCompleted() {
+			r.kubegresRestoreContext.Log.InfoEvent("RestoreJobCompleted", "Restorejob has completed succesfully.")
+		}
+
+		r.kubegresRestoreContext.Status.SetIsCompleted(true)
 		r.kubegresRestoreContext.Status.SetCurrentStage(ctx.StageRestoreJobIsCompleted)
-	} else if r.IsJobDeployed && !r.IsJobRunning && !r.IsJobCompleted {
+	} else if jobHasFailed {
+		r.JobPhase = JobFailed
+		r.kubegresRestoreContext.Status.SetIsCompleted(false)
 		r.kubegresRestoreContext.Status.SetCurrentStage(ctx.StageRestoreJobFailed)
-		r.kubegresRestoreContext.Log.ErrorEvent("RestoreJobFailed", errors.New("unable to complete restore job"), "Unable to complete restore job", "Name of job", restoreJob.Name)
+
+		jobPod, err := r.getRestoreJobPod()
+		if err != nil {
+			r.kubegresRestoreContext.Log.ErrorEvent("FailedToGetExitCodeOfFailedPod", err, "Unable to get exit code of failed restore job.", "Name of job", r.Job.Name)
+			return err
+		}
+
+		jobExitCode := r.getExitCodeFromFailedJob(jobPod)
+		r.kubegresRestoreContext.Log.InfoEvent("RestoreJobFailed", "Unable to complete restore job, exit code "+strconv.Itoa(int(jobExitCode))+". See 'pod/"+jobPod.Name+"' for more details.", "Name of job", r.Job.Name)
 	}
 
 	return nil
 }
 
-func (r *RestoreJobStates) loadClusterStates() error {
-	r.Cluster = &v1.Kubegres{}
-	clusterKey := types.NamespacedName{
-		Namespace: r.kubegresRestoreContext.KubegresRestore.Namespace,
-		Name:      r.kubegresRestoreContext.KubegresRestore.Spec.ClusterName,
+func (r *RestoreJobStates) getRestoreJobResource() (*batchv1.Job, error) {
+	restoreJob := &batchv1.Job{}
+	resourceName := r.kubegresRestoreContext.GetRestoreJobName()
+	resourceNamespace := r.kubegresRestoreContext.KubegresRestore.Namespace
+	restoreJobKey := types.NamespacedName{
+		Namespace: resourceNamespace,
+		Name:      resourceName,
 	}
-	err := r.kubegresRestoreContext.Client.Get(r.kubegresRestoreContext.Ctx, clusterKey, r.Cluster)
+
+	err := r.kubegresRestoreContext.Client.Get(r.kubegresRestoreContext.Ctx, restoreJobKey, restoreJob)
+
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			r.IsClusterDeployed = false
-			r.IsClusterReady = false
-
-			r.kubegresRestoreContext.Status.SetCurrentStage(ctx.StageDeployingCluster)
-			return nil
+			err = nil
 		} else {
-			r.kubegresRestoreContext.Log.ErrorEvent("KubegresClusterLoadingErr", err, "Unable to load deployed kubegres cluster", "KubegresCluster", clusterKey)
-			return err
+			r.kubegresRestoreContext.Log.ErrorEvent("RestoreJobLoadingErr", err, "Unable to load deployed restore job.", "RestoreJob Name", restoreJobKey)
 		}
 	}
 
-	kubegresLogwrapper := log.LogWrapper[*v1.Kubegres]{Resource: r.Cluster, Logger: r.kubegresRestoreContext.Log.Logger, Recorder: r.kubegresRestoreContext.Log.Recorder}
-	kubegresStatusWrapper := &status.KubegresStatusWrapper{
-		Kubegres: r.Cluster,
-		Ctx:      r.kubegresRestoreContext.Ctx,
-		Log:      kubegresLogwrapper,
-		Client:   r.kubegresRestoreContext.Client,
-	}
-	kubegresContext := ctx.KubegresContext{
-		Kubegres: r.Cluster,
-		Status:   kubegresStatusWrapper,
-		Ctx:      r.kubegresRestoreContext.Ctx,
-		Log:      kubegresLogwrapper,
-		Client:   r.kubegresRestoreContext.Client,
-	}
+	return restoreJob, err
+}
 
-	statefulSetStates, err := statefulset.LoadStatefulSetsStates(kubegresContext)
+func (r *RestoreJobStates) getRestoreJobPod() (*core.Pod, error) {
+	restorePodList := &core.PodList{}
+	jobName := r.kubegresRestoreContext.GetRestoreJobName()
+	opts := []client.ListOption{
+		client.InNamespace(r.kubegresRestoreContext.KubegresRestore.Namespace),
+		client.MatchingLabels{"job-name": jobName},
+	}
+	err := r.kubegresRestoreContext.Client.List(r.kubegresRestoreContext.Ctx, restorePodList, opts...)
+
 	if err != nil {
-		r.kubegresRestoreContext.Log.ErrorEvent("StatefulSetInKubegresLoadingErr", err, "Unable to load state of deployed StatefulSets in Kubegres cluster", "Kubegres name", r.kubegresRestoreContext.KubegresRestore.Spec.ClusterName)
-		return err
+		if apierrors.IsNotFound(err) {
+			r.kubegresRestoreContext.Log.Info("Restore job has not deployed any pods yet.", "Job name", jobName)
+			err = nil
+		} else {
+			r.kubegresRestoreContext.Log.ErrorEvent("RestoreJobPodLoadingErr", err, "Unable to load any pods owned by restore job.", "Job name", jobName)
+		}
 	}
 
-	serviceStates, err := loadServicesStates(kubegresContext)
+	if len(restorePodList.Items) == 0 {
+		return &core.Pod{}, err
+	}
+	return &restorePodList.Items[0], err
+}
+
+func (r *RestoreJobStates) getPvcResource() (*core.PersistentVolumeClaim, error) {
+	pvc := &core.PersistentVolumeClaim{}
+	resourceName := r.kubegresRestoreContext.KubegresRestore.Spec.DataSource.File.PvcName
+	resourceNamespace := r.kubegresRestoreContext.KubegresRestore.Namespace
+	pvcKey := types.NamespacedName{
+		Namespace: resourceNamespace,
+		Name:      resourceName,
+	}
+
+	err := r.kubegresRestoreContext.Client.Get(r.kubegresRestoreContext.Ctx, pvcKey, pvc)
+
 	if err != nil {
-		r.kubegresRestoreContext.Log.ErrorEvent("ServiceInKubegresLoadingErr", err, "Unable to load state of deployed service in Kubegres cluster", "Kubegres name", r.kubegresRestoreContext.KubegresRestore.Spec.ClusterName)
-		return err
+		if apierrors.IsNotFound(err) {
+			err = nil
+		} else {
+			r.kubegresRestoreContext.Log.ErrorEvent("RestoreJobPvcLoadingErr", err, "Unable to load deployed restore job PVC.", "PVC Name", pvcKey)
+		}
 	}
 
-	r.IsClusterDeployed = true
-	r.IsClusterReady = statefulSetStates.Primary.IsReady && serviceStates.Primary.IsDeployed
+	return pvc, err
+}
 
-	if !r.IsClusterReady {
-		r.kubegresRestoreContext.Status.SetCurrentStage(ctx.StageWaitingForCluster)
-	}
-
-	return nil
+func (r *RestoreJobStates) getExitCodeFromFailedJob(jobPod *core.Pod) int32 {
+	return jobPod.Status.ContainerStatuses[0].State.Terminated.ExitCode
 }

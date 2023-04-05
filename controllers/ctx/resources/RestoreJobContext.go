@@ -12,14 +12,16 @@ import (
 	"reactive-tech.io/kubegres/controllers/ctx/status"
 	"reactive-tech.io/kubegres/controllers/spec/enforcer/resources_count_spec"
 	"reactive-tech.io/kubegres/controllers/states"
+	log2 "reactive-tech.io/kubegres/controllers/states/log"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type RestoreJobContext struct {
-	LogWrapper             log.LogWrapper[*v1.KubegresRestore]
-	KubegresRestoreContext ctx.KubegresRestoreContext
-	RestoreStatusWrapper   *status.RestoreStatusWrapper
-	RestoreJobStates       states.RestoreJobStates
+	LogWrapper                   log.LogWrapper[*v1.KubegresRestore]
+	KubegresRestoreContext       ctx.KubegresRestoreContext
+	RestoreStatusWrapper         *status.RestoreStatusWrapper
+	RestoreJobStates             states.RestoreResourceStates
+	RestoreResourcesStatesLogger log2.RestoreResourcesStatesLogger
 
 	ResourcesCountSpecEnforcer resources_count_spec.ResourcesCountSpecEnforcer
 	kubegresCountSpecEnforcer  resources_count_spec.KubegresCountSpecEnforcer
@@ -30,9 +32,9 @@ func CreateRestoreJobContext(kubegresRestore *v1.KubegresRestore,
 	ctx2 context.Context,
 	logger logr.Logger,
 	client client.Client,
-	recorder record.EventRecorder) (*RestoreJobContext, error) {
+	recorder record.EventRecorder) (rc *RestoreJobContext, err error) {
 
-	rc := &RestoreJobContext{}
+	rc = &RestoreJobContext{}
 
 	rc.LogWrapper = log.LogWrapper[*v1.KubegresRestore]{Resource: kubegresRestore, Logger: logger, Recorder: recorder}
 	rc.RestoreStatusWrapper = &status.RestoreStatusWrapper{
@@ -49,12 +51,12 @@ func CreateRestoreJobContext(kubegresRestore *v1.KubegresRestore,
 		Client:          client,
 	}
 
-	var err error
-	rc.RestoreJobStates, err = states.LoadRestoreJobStates(rc.KubegresRestoreContext)
+	rc.RestoreJobStates, err = states.LoadRestoreResourceStates(rc.KubegresRestoreContext)
 	if err != nil {
 		return rc, err
 	}
 
+	rc.RestoreResourcesStatesLogger = log2.CreateRestoreResourcesStatesLogger(rc.KubegresRestoreContext, rc.RestoreJobStates)
 	kubegresSpec, err := rc.getKubegresSpec()
 	if err != nil {
 		rc.LogWrapper.ErrorEvent("GetKubegresSpecError", err, "Unable to get kubegres spec.", "Get Kubegres spec from existing cluster", rc.KubegresRestoreContext.ShouldRestoreFromExistingCluster())

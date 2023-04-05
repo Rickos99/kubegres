@@ -22,12 +22,12 @@ import (
 
 type KubegresCountSpecEnforcer struct {
 	kubegresRestoreContext ctx.KubegresRestoreContext
-	restoreStates          states.RestoreJobStates
+	restoreStates          states.RestoreResourceStates
 	kubegresSpec           kubegresv1.KubegresSpec
 }
 
 func CreateKubegresCountSpecEnforcer(kubegresRestoreContext ctx.KubegresRestoreContext,
-	restoreStates states.RestoreJobStates,
+	restoreStates states.RestoreResourceStates,
 	kubegresSpec kubegresv1.KubegresSpec) KubegresCountSpecEnforcer {
 	return KubegresCountSpecEnforcer{
 		kubegresRestoreContext: kubegresRestoreContext,
@@ -70,7 +70,7 @@ func (r *KubegresCountSpecEnforcer) deployKubegres() error {
 }
 
 func (r *KubegresCountSpecEnforcer) addReplicasToKubegres() error {
-	kubegres := r.restoreStates.Cluster
+	kubegres := r.restoreStates.Cluster.Kubegres
 	kubegres.Spec.Replicas = r.kubegresRestoreContext.KubegresRestore.Spec.DataSource.Cluster.ClusterSpec.Replicas
 
 	err := r.kubegresRestoreContext.Client.Update(r.kubegresRestoreContext.Ctx, kubegres)
@@ -84,11 +84,11 @@ func (r *KubegresCountSpecEnforcer) addReplicasToKubegres() error {
 }
 
 func (r *KubegresCountSpecEnforcer) isClusterDeployed() bool {
-	return r.restoreStates.IsClusterDeployed
+	return r.restoreStates.Cluster.IsDeployed
 }
 
 func (r *KubegresCountSpecEnforcer) isJobCompleted() bool {
-	return r.restoreStates.IsJobCompleted
+	return r.restoreStates.Job.JobPhase == states.JobSucceded
 }
 
 func (r *KubegresCountSpecEnforcer) kubegresHasReplicas() bool {

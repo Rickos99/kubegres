@@ -23,13 +23,13 @@ import (
 
 type JobCountSpecEnforcer struct {
 	kubegresRestoreContext ctx.KubegresRestoreContext
-	restoreStates          states.RestoreJobStates
+	restoreStates          states.RestoreResourceStates
 	resourcesCreator       template.RestoreJobResourcesCreatorTemplate
 	kubegresSpec           kubegresv1.KubegresSpec
 }
 
 func CreateJobCountSpecEnforcer(kubegresRestoreContext ctx.KubegresRestoreContext,
-	restoreStates states.RestoreJobStates,
+	restoreStates states.RestoreResourceStates,
 	kubegresSpec kubegresv1.KubegresSpec) JobCountSpecEnforcer {
 
 	resourcesCreator := template.CreateRestoreJobCreator(kubegresRestoreContext)
@@ -42,7 +42,11 @@ func CreateJobCountSpecEnforcer(kubegresRestoreContext ctx.KubegresRestoreContex
 }
 
 func (r *JobCountSpecEnforcer) EnforceSpec() error {
-	if r.isClusterReady() && !r.isJobDeployed() {
+	if r.isJobCompleted() || r.isJobDeployed() {
+		return nil
+	}
+
+	if r.isClusterReady() {
 		return r.deployRestoreJob()
 	}
 	return nil
@@ -66,9 +70,13 @@ func (r *JobCountSpecEnforcer) deployRestoreJob() error {
 }
 
 func (r *JobCountSpecEnforcer) isClusterReady() bool {
-	return r.restoreStates.IsClusterReady
+	return r.restoreStates.Cluster.IsReady
+}
+
+func (r *JobCountSpecEnforcer) isJobCompleted() bool {
+	return r.restoreStates.Job.JobPhase == states.JobSucceded
 }
 
 func (r *JobCountSpecEnforcer) isJobDeployed() bool {
-	return r.restoreStates.IsJobDeployed
+	return r.restoreStates.Job.IsJobDeployed
 }

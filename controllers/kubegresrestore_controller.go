@@ -76,7 +76,7 @@ func (r *KubegresRestoreReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	// ### 2. Check kubegres restore spec
 	// TODO: Implement spec checker.
 
-	restoreJobContext.LogWrapper.Logger.Info("KUBEGRESRESTORE STATES", "state", restoreJobContext.RestoreJobStates)
+	restoreJobContext.RestoreResourcesStatesLogger.Log()
 
 	// ### 3. Enforce resources
 	return r.returnn(ctrl.Result{}, restoreJobContext.ResourcesCountSpecEnforcer.EnforceSpec(), restoreJobContext)
