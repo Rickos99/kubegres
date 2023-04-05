@@ -45,7 +45,7 @@ const (
 	StageWaitingForCluster     = "Waiting for Kubegres Cluster to be ready"
 	StageRestoreJobIsDeploying = "Waiting for restore job to deploy"
 	StageRestoreJobIsRunning   = "Restoring database from snaphot"
-	StageRestoreJobIsCompleted = "Changing Kubegres Cluster replicas"
+	StageRestoreJobIsCompleted = "Restorejob completed succesfully"
 	StageRestoreJobFailed      = "Restorejob has stopped due to fatal error"
 )
 
