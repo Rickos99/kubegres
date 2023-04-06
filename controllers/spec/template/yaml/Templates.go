@@ -217,10 +217,14 @@ data:
     dt=$(date '+%d/%m/%Y %H:%M:%S')
 
     if [ ! -f $RESTOREPOINT_FILEPATH ]; then
-      echo "The specified snapshot '${RESTOREPOINT_FILEPATH}' not found"; 
+      echo "The specified snapshot '${RESTOREPOINT_FILEPATH}' not found";
+      exit 2
     fi
 
     echo "$dt - Restore of ${POSTGRES_DB} from ${RESTOREPOINT_FILEPATH} has started"
+
+    echo "$dt - Running: createdb --no-password -h ${BACKUP_TARGET_DB_HOST_NAME} -U postgres ${POSTGRES_DB}"
+    createdb --no-password -h ${BACKUP_TARGET_DB_HOST_NAME} -U postgres ${POSTGRES_DB}
 
     echo "$dt - Running: pg_restore --no-password -d ${POSTGRES_DB} -h ${BACKUP_TARGET_DB_HOST_NAME} -U postgres --verbose --exit-on-error ${RESTOREPOINT_FILEPATH}"
     pg_restore --no-password -d ${POSTGRES_DB} -h ${BACKUP_TARGET_DB_HOST_NAME} -U postgres --verbose --exit-on-error ${RESTOREPOINT_FILEPATH}
