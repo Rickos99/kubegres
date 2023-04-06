@@ -1,0 +1,58 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: job-restore-mypostgres
+  labels:
+    app: postgres-db
+    replicationRole: none
+    clusterName: mypostgres
+    role: restore
+spec:
+  backoffLimit: 0
+
+  template:
+    spec:
+      restartPolicy: Never
+      
+      volumes:
+        - name: backup-volume
+          persistentVolumeClaim:
+            claimName: toBeReplaced
+        - name: postgres-config
+          configMap:
+            name: toBeReplaced
+            defaultMode: 0777
+
+      containers:
+        - name: postgres-restore
+          image: postgres:latest
+          args: 
+            - sh
+            - -c
+            - /tmp/restore_database.sh
+          
+          volumeMounts:
+            - name: backup-volume
+              mountPath: toBeReplaced
+            - name: postgres-config
+              mountPath: /tmp/restore_database.sh
+              subPath: restore_database.sh
+          
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: toBeReplaced
+                  key: superUserPassword
+            - name: POSTGRES_DB
+              value: toBeReplaced
+            - name: BACKUP_TARGET_DB_HOST_NAME
+              value: toBeReplaced
+            - name: RESTOREPOINT_FILEPATH
+              value: toBeReplaced
+            # - name: POSTGRES_PASSWORD
+            #   valueFrom:
+            #     secretKeyRef:
+            #       name: toBeReplaced
+            #       key: superUserPassword
+

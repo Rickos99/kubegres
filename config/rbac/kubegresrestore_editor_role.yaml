@@ -1,0 +1,31 @@
+# permissions for end users to edit kubegresrestores.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: kubegresrestore-editor-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: kubegres
+    app.kubernetes.io/part-of: kubegres
+    app.kubernetes.io/managed-by: kustomize
+  name: kubegresrestore-editor-role
+rules:
+- apiGroups:
+  - kubegres.reactive-tech.io
+  resources:
+  - kubegresrestores
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - kubegres.reactive-tech.io
+  resources:
+  - kubegresrestores/status
+  verbs:
+  - get

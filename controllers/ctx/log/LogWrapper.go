@@ -23,52 +23,52 @@ package log
 import (
 	"github.com/go-logr/logr"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
-	postgresV1 "reactive-tech.io/kubegres/api/v1"
 )
 
-type LogWrapper struct {
-	Kubegres *postgresV1.Kubegres
+type LogWrapper[T runtime.Object] struct {
+	Resource T
 	Logger   logr.Logger
 	Recorder record.EventRecorder
 }
 
-func (r *LogWrapper) WithValues(keysAndValues ...interface{}) {
+func (r *LogWrapper[T]) WithValues(keysAndValues ...interface{}) {
 	r.Logger = r.Logger.WithValues(keysAndValues...)
 }
 
-func (r *LogWrapper) WithName(name string) {
+func (r *LogWrapper[T]) WithName(name string) {
 	r.Logger = r.Logger.WithName(name)
 }
 
-func (r *LogWrapper) Info(msg string, keysAndValues ...interface{}) {
+func (r *LogWrapper[T]) Info(msg string, keysAndValues ...interface{}) {
 	r.Logger.Info(msg, keysAndValues...)
 }
 
-func (r *LogWrapper) Error(err error, msg string, keysAndValues ...interface{}) {
+func (r *LogWrapper[T]) Error(err error, msg string, keysAndValues ...interface{}) {
 	r.Logger.Error(err, msg, keysAndValues...)
 }
 
-func (r *LogWrapper) Warning(msg string, keysAndValues ...interface{}) {
+func (r *LogWrapper[T]) Warning(msg string, keysAndValues ...interface{}) {
 	r.Logger.Info("Warning: "+msg, keysAndValues...)
 }
 
-func (r *LogWrapper) InfoEvent(eventReason string, msg string, keysAndValues ...interface{}) {
+func (r *LogWrapper[T]) InfoEvent(eventReason string, msg string, keysAndValues ...interface{}) {
 	r.Info(msg, keysAndValues...)
-	r.Recorder.Eventf(r.Kubegres, v1.EventTypeNormal, eventReason, r.constructFullMsg(msg, keysAndValues))
+	r.Recorder.Eventf(r.Resource, v1.EventTypeNormal, eventReason, r.constructFullMsg(msg, keysAndValues))
 }
 
-func (r *LogWrapper) ErrorEvent(eventReason string, err error, msg string, keysAndValues ...interface{}) {
+func (r *LogWrapper[T]) ErrorEvent(eventReason string, err error, msg string, keysAndValues ...interface{}) {
 	r.Error(err, msg, keysAndValues...)
-	r.Recorder.Eventf(r.Kubegres, v1.EventTypeWarning, eventReason, r.constructFullErrMsg(err, msg, keysAndValues))
+	r.Recorder.Eventf(r.Resource, v1.EventTypeWarning, eventReason, r.constructFullErrMsg(err, msg, keysAndValues))
 }
 
-func (r *LogWrapper) WarningEvent(eventReason string, msg string, keysAndValues ...interface{}) {
+func (r *LogWrapper[T]) WarningEvent(eventReason string, msg string, keysAndValues ...interface{}) {
 	r.Warning(msg, keysAndValues...)
-	r.Recorder.Eventf(r.Kubegres, v1.EventTypeWarning, eventReason, r.constructFullMsg(msg, keysAndValues))
+	r.Recorder.Eventf(r.Resource, v1.EventTypeWarning, eventReason, r.constructFullMsg(msg, keysAndValues))
 }
 
-func (r *LogWrapper) constructFullMsg(msg string, keysAndValues ...interface{}) string {
+func (r *LogWrapper[T]) constructFullMsg(msg string, keysAndValues ...interface{}) string {
 	if msg == "" {
 		return ""
 	}
@@ -80,7 +80,7 @@ func (r *LogWrapper) constructFullMsg(msg string, keysAndValues ...interface{}) 
 	return msg
 }
 
-func (r *LogWrapper) constructFullErrMsg(err error, msg string, keysAndValues ...interface{}) string {
+func (r *LogWrapper[T]) constructFullErrMsg(err error, msg string, keysAndValues ...interface{}) string {
 	msgToReturn := ""
 	separator := ""
 

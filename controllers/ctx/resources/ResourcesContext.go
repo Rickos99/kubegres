@@ -44,7 +44,7 @@ import (
 )
 
 type ResourcesContext struct {
-	LogWrapper                   log.LogWrapper
+	LogWrapper                   log.LogWrapper[*postgresV1.Kubegres]
 	KubegresStatusWrapper        *status.KubegresStatusWrapper
 	KubegresContext              ctx2.KubegresContext
 	ResourcesStates              states.ResourcesStates
@@ -79,7 +79,7 @@ func CreateResourcesContext(kubegres *postgresV1.Kubegres,
 
 	rc = &ResourcesContext{}
 
-	rc.LogWrapper = log.LogWrapper{Kubegres: kubegres, Logger: logger, Recorder: recorder}
+	rc.LogWrapper = log.LogWrapper[*postgresV1.Kubegres]{Resource: kubegres, Logger: logger, Recorder: recorder}
 	rc.LogWrapper.Info("KUBEGRES", "name", kubegres.Name, "Status", kubegres.Status)
 	//rc.LogWrapper.WithName(kubegres.Name)
 

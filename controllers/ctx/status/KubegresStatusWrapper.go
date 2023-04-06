@@ -10,7 +10,7 @@ import (
 type KubegresStatusWrapper struct {
 	Kubegres             *v1.Kubegres
 	Ctx                  context.Context
-	Log                  log.LogWrapper
+	Log                  log.LogWrapper[*v1.Kubegres]
 	Client               client.Client
 	statusFieldsToUpdate map[string]interface{}
 }

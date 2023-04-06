@@ -1,0 +1,27 @@
+# permissions for end users to view kubegresrestores.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: kubegresrestore-viewer-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: kubegres
+    app.kubernetes.io/part-of: kubegres
+    app.kubernetes.io/managed-by: kustomize
+  name: kubegresrestore-viewer-role
+rules:
+- apiGroups:
+  - kubegres.reactive-tech.io
+  resources:
+  - kubegresrestores
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - kubegres.reactive-tech.io
+  resources:
+  - kubegresrestores/status
+  verbs:
+  - get
