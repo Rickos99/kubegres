@@ -3943,6 +3943,8 @@ spec:
                         type: string
                     type: object
                 type: object
+              databaseName:
+                type: string
               resources:
                 description: ResourceRequirements describes the compute resource requirements.
                 properties:

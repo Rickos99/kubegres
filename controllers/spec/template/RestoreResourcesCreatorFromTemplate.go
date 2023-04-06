@@ -45,7 +45,7 @@ func (r *RestoreJobResourcesCreatorTemplate) CreateRestoreJob(kubegresSpec kubeg
 	container := &restoreJobTemplate.Spec.Template.Spec.Containers[0]
 	container.VolumeMounts[0].MountPath = restoreSpec.DataSource.File.Mountpath
 	container.Env[0].ValueFrom = r.getKubegresEnvVar(ctx.EnvVarNameOfPostgresSuperUserPsw, kubegresSpec).ValueFrom
-	container.Env[1].Value = "postgres" //TODO: Replace with dynamic value
+	container.Env[1].Value = restoreSpec.DatabaseName
 	container.Env[2].Value = restoreSpec.ClusterName
 	container.Env[3].Value = path.Join(restoreSpec.DataSource.File.Mountpath, restoreSpec.DataSource.File.Snapshot)
 

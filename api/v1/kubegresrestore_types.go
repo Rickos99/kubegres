@@ -47,6 +47,7 @@ type KubegresRestoreSpec struct {
 	DataSource   DataSource              `json:"dataSource,omitempty"`
 	Resources    v1.ResourceRequirements `json:"resources,omitempty"`
 	ClusterName  string                  `json:"clusterName,omitempty"`
+	DatabaseName string                  `json:"databaseName,omitempty"`
 }
 
 // ----------------------- STATUS -----------------------------------------
