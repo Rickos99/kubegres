@@ -74,7 +74,13 @@ func (r *KubegresRestoreReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	// ### 2. Check kubegres restore spec
-	// TODO: Implement spec checker.
+	specCheckResult, err := restoreJobContext.RestoreSpecChecker.CheckSpec()
+	if err != nil {
+		return r.returnn(ctrl.Result{}, err, restoreJobContext)
+
+	} else if specCheckResult.HasSpecFatalError {
+		return r.returnn(ctrl.Result{}, nil, restoreJobContext)
+	}
 
 	restoreJobContext.RestoreResourcesStatesLogger.Log()
 
