@@ -49,6 +49,12 @@ func (r *RestoreJobResourcesCreatorTemplate) CreateRestoreJob(kubegresSpec kubeg
 	container.Env[2].Value = restoreSpec.ClusterName
 	container.Env[3].Value = path.Join(restoreSpec.DataSource.File.Mountpath, restoreSpec.DataSource.File.Snapshot)
 
+	if r.kubegresRestoreContext.AreResourcesSpecifiedForRestoreJob() {
+		restoreJobTemplate.Spec.Template.Spec.Containers[0].Resources = restoreSpec.Resources
+	} else {
+		restoreJobTemplate.Spec.Template.Spec.Containers[0].Resources = core.ResourceRequirements{}
+	}
+
 	return restoreJobTemplate, nil
 }
 

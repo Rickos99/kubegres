@@ -23,27 +23,35 @@ import (
 type KubegresCountSpecEnforcer struct {
 	kubegresRestoreContext ctx.KubegresRestoreContext
 	restoreStates          states.RestoreResourceStates
-	kubegresSpec           kubegresv1.KubegresSpec
+	targetKubegresSpec     kubegresv1.KubegresSpec
 }
 
 func CreateKubegresCountSpecEnforcer(kubegresRestoreContext ctx.KubegresRestoreContext,
 	restoreStates states.RestoreResourceStates,
-	kubegresSpec kubegresv1.KubegresSpec) KubegresCountSpecEnforcer {
+	targetKubegresSpec kubegresv1.KubegresSpec) KubegresCountSpecEnforcer {
 	return KubegresCountSpecEnforcer{
 		kubegresRestoreContext: kubegresRestoreContext,
 		restoreStates:          restoreStates,
-		kubegresSpec:           kubegresSpec,
+		targetKubegresSpec:     targetKubegresSpec,
 	}
 }
 
 func (r *KubegresCountSpecEnforcer) EnforceSpec() error {
-	//TODO: If job is completed, set replicas and update the cluster spec.
 	if !r.isClusterDeployed() {
 		return r.deployKubegres()
 	}
 
-	if r.isClusterDeployed() && r.isJobCompleted() && r.kubegresHasReplicas() {
-		return r.addReplicasToKubegres()
+	if r.isJobCompleted() {
+		// TODO: reorder these 2 operations. First modify resource limits, then add replicas. Should be faster that way.
+		if r.kubegresHasReplicas() {
+			if err := r.addReplicasToKubegres(); err != nil {
+				return err
+			}
+		}
+
+		if r.areCustomResourceLimitsDefined() {
+			return r.modifyResourceLimitsOfKubegres()
+		}
 	}
 
 	return nil
@@ -52,11 +60,16 @@ func (r *KubegresCountSpecEnforcer) EnforceSpec() error {
 func (r *KubegresCountSpecEnforcer) deployKubegres() error {
 	var replicas int32 = 1
 	kubegres := &kubegresv1.Kubegres{}
-	kubegres.Spec = r.kubegresSpec
+	kubegres.Spec = r.targetKubegresSpec
 	kubegres.ObjectMeta.Name = r.kubegresRestoreContext.KubegresRestore.Spec.ClusterName
 	kubegres.ObjectMeta.Namespace = r.kubegresRestoreContext.KubegresRestore.Namespace
 	kubegres.Spec.Replicas = &replicas
-	kubegres.Spec.Resources = r.kubegresRestoreContext.KubegresRestore.Spec.Resources
+
+	if r.areCustomResourceLimitsDefined() {
+		kubegres.Spec.Resources = r.kubegresRestoreContext.KubegresRestore.Spec.Resources
+	} else {
+		kubegres.Spec.Resources = r.kubegresRestoreContext.SourceKubegresClusterSpec.Resources
+	}
 
 	err := r.kubegresRestoreContext.Client.Create(r.kubegresRestoreContext.Ctx, kubegres)
 	if err != nil {
@@ -71,7 +84,7 @@ func (r *KubegresCountSpecEnforcer) deployKubegres() error {
 
 func (r *KubegresCountSpecEnforcer) addReplicasToKubegres() error {
 	kubegres := r.restoreStates.Cluster.Kubegres
-	kubegres.Spec.Replicas = r.kubegresRestoreContext.KubegresRestore.Spec.DataSource.Cluster.ClusterSpec.Replicas
+	kubegres.Spec.Replicas = r.kubegresRestoreContext.SourceKubegresClusterSpec.Replicas
 
 	err := r.kubegresRestoreContext.Client.Update(r.kubegresRestoreContext.Ctx, kubegres)
 	if err != nil {
@@ -83,6 +96,18 @@ func (r *KubegresCountSpecEnforcer) addReplicasToKubegres() error {
 	return nil
 }
 
+func (r *KubegresCountSpecEnforcer) areCustomResourceLimitsDefined() bool {
+	restoreSpec := r.kubegresRestoreContext.KubegresRestore.Spec
+	return restoreSpec.Resources.Requests != nil || restoreSpec.Resources.Limits != nil
+}
+
+func (r *KubegresCountSpecEnforcer) modifyResourceLimitsOfKubegres() error {
+	kubegres := r.restoreStates.Cluster.Kubegres
+	kubegres.Spec.Resources = r.kubegresRestoreContext.SourceKubegresClusterSpec.Resources
+
+	return r.kubegresRestoreContext.Client.Update(r.kubegresRestoreContext.Ctx, kubegres)
+}
+
 func (r *KubegresCountSpecEnforcer) isClusterDeployed() bool {
 	return r.restoreStates.Cluster.IsDeployed
 }
@@ -92,6 +117,5 @@ func (r *KubegresCountSpecEnforcer) isJobCompleted() bool {
 }
 
 func (r *KubegresCountSpecEnforcer) kubegresHasReplicas() bool {
-	// TODO: Return number of replicas instead
-	return r.kubegresRestoreContext.KubegresRestore.Spec.DataSource.Cluster.ClusterSpec.Replicas != nil
+	return r.kubegresRestoreContext.SourceKubegresClusterSpec.Replicas != nil
 }
