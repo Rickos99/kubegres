@@ -106,7 +106,8 @@ func (r *KubegresRestoreContext) getKubegresSpecFromExistingCluster() (v1.Kubegr
 	clusterKey := r.GetNamespacesresourceName(r.KubegresRestore.Spec.DataSource.Cluster.ClusterName)
 	err := r.Client.Get(r.Ctx, clusterKey, cluster)
 	if err != nil && apierrors.IsNotFound(err) {
-		r.Log.ErrorEvent("KubegresSpecFromExistingClusterErr", err, "Unable to get Kubegres specification from non-existing source cluster", "ClusterName", clusterKey)
+		r.Log.ErrorEvent("KubegresSpecFromExistingClusterErr", err, "Unable to get Kubegres specification from non-existing source cluster", "ClusterName", clusterKey.Name)
+		err = nil
 	}
 	return cluster.Spec, err
 }

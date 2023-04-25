@@ -16,6 +16,7 @@ package checker
 
 import (
 	"errors"
+	"reflect"
 
 	core "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -59,6 +60,13 @@ func (r *RestoreSpecChecker) CheckSpec() (SpecCheckResult, error) {
 		specCheckResult.FatalErrorMessage = r.createErrMsgSpecUndefined("spec.DataSource.File.Snapshot")
 	}
 
+	if r.isClusterNameAndClusterSpecDefined() {
+		specCheckResult.HasSpecFatalError = true
+		specCheckResult.FatalErrorMessage = r.logSpecErrMsg("In the Resources Spec the fields " +
+			"'spec.DataSource.Cluster.ClusterName' and 'spec.DataSource.Cluster.ClusterSpec'" +
+			" cannot be used at the same time. Please unset one of them.")
+	}
+
 	if r.kubegresRestoreContext.ShouldRestoreFromExistingCluster() {
 		isDataSourceKubegresClusterDeployed, err := r.isDataSourceKubegresClusterDeployed()
 		if err != nil {
@@ -99,6 +107,16 @@ func (r *RestoreSpecChecker) CheckSpec() (SpecCheckResult, error) {
 
 func (r *RestoreSpecChecker) isRestoreJobPvcDeployed() bool {
 	return r.restoreResourceStates.Job.IsPvcDeployed
+}
+
+func (r *RestoreSpecChecker) isClusterNameAndClusterSpecDefined() bool {
+	clusterSpec := r.kubegresRestoreContext.KubegresRestore.Spec.DataSource.Cluster.ClusterSpec
+	emptyClusterSpec := kubegresv1.KubegresSpec{}
+
+	clusterSpecIsSpecified := !reflect.DeepEqual(clusterSpec, emptyClusterSpec)
+	clusterNameIsSpecified := r.kubegresRestoreContext.KubegresRestore.Spec.DataSource.Cluster.ClusterName != ""
+
+	return clusterSpecIsSpecified && clusterNameIsSpecified
 }
 
 func (r *RestoreSpecChecker) isDataSourceKubegresClusterDeployed() (bool, error) {
