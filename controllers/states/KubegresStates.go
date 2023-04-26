@@ -29,8 +29,9 @@ import (
 type KubegresStates struct {
 	kubegresRestoreContext ctx.KubegresRestoreContext
 
-	IsDeployed bool
-	IsReady    bool
+	IsDeployed                 bool
+	IsReady                    bool
+	IsManagedByKubegresRestore bool
 
 	Kubegres *v1.Kubegres
 }
@@ -50,6 +51,7 @@ func (r *KubegresStates) loadStates() (err error) {
 	if r.Kubegres.Name == "" {
 		r.IsDeployed = false
 		r.IsReady = false
+		r.IsManagedByKubegresRestore = false
 		return nil
 	}
 
@@ -69,6 +71,7 @@ func (r *KubegresStates) loadStates() (err error) {
 
 	r.IsDeployed = true
 	r.IsReady = statefulSetStates.Primary.IsReady && serviceStates.Primary.IsDeployed
+	r.IsManagedByKubegresRestore = r.isKubegresManagedByKubegresRestore()
 
 	if !r.IsReady {
 		r.kubegresRestoreContext.Status.SetCurrentStage(ctx.StageWaitingForCluster)
@@ -115,4 +118,12 @@ func (r *KubegresStates) createKubegresContext() ctx.KubegresContext {
 		Client:   r.kubegresRestoreContext.Client,
 	}
 	return kubegresContext
+}
+
+func (r *KubegresStates) isKubegresManagedByKubegresRestore() bool {
+	label, exists := r.Kubegres.Labels[ctx.ManagedByKubegresRestoreLabel]
+	if exists {
+		return label == "true"
+	}
+	return false
 }

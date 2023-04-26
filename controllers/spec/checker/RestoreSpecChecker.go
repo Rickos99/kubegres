@@ -60,6 +60,13 @@ func (r *RestoreSpecChecker) CheckSpec() (SpecCheckResult, error) {
 		specCheckResult.FatalErrorMessage = r.createErrMsgSpecUndefined("spec.DataSource.File.Snapshot")
 	}
 
+	if r.restoreResourceStates.Cluster.IsDeployed && !r.isDeployedClusterMangedByKubegresRestore() {
+		specCheckResult.HasSpecFatalError = true
+		specCheckResult.FatalErrorMessage = r.logSpecErrMsg("In the Resources Spec the value of " +
+			"'spec.ClusterName' must not refer to an existing Kubegres resource. Please change this value, " +
+			"otherwise the restore process cannot proceed.")
+	}
+
 	if r.isClusterNameAndClusterSpecDefined() {
 		specCheckResult.HasSpecFatalError = true
 		specCheckResult.FatalErrorMessage = r.logSpecErrMsg("In the Resources Spec the fields " +
@@ -107,6 +114,10 @@ func (r *RestoreSpecChecker) CheckSpec() (SpecCheckResult, error) {
 
 func (r *RestoreSpecChecker) isRestoreJobPvcDeployed() bool {
 	return r.restoreResourceStates.Job.IsPvcDeployed
+}
+
+func (r *RestoreSpecChecker) isDeployedClusterMangedByKubegresRestore() bool {
+	return r.restoreResourceStates.Cluster.IsDeployed && r.restoreResourceStates.Cluster.IsManagedByKubegresRestore
 }
 
 func (r *RestoreSpecChecker) isClusterNameAndClusterSpecDefined() bool {

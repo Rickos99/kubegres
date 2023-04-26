@@ -65,6 +65,9 @@ func (r *KubegresCountSpecEnforcer) deployKubegres() error {
 	kubegres.ObjectMeta.Namespace = r.kubegresRestoreContext.KubegresRestore.Namespace
 	kubegres.Spec.Replicas = &replicas
 
+	kubegres.Labels = map[string]string{}
+	kubegres.Labels[ctx.ManagedByKubegresRestoreLabel] = "true"
+
 	if r.areCustomResourceLimitsDefined() {
 		kubegres.Spec.Resources = r.kubegresRestoreContext.KubegresRestore.Spec.Resources
 	} else {

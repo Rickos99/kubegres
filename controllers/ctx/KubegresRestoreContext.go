@@ -41,6 +41,7 @@ const (
 	KindKubegresRestore           = "KubegresRestore"
 	RestoreJobSuffix              = "-job"
 	RestoreJobKubegresTargetField = ".spec.clusterName"
+	ManagedByKubegresRestoreLabel = "managed-by-kubegres-restore"
 )
 
 const (
