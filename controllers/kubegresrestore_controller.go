@@ -35,6 +35,7 @@ import (
 
 	kubegresv1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
+	ctrl_ctx "reactive-tech.io/kubegres/controllers/ctx"
 	"reactive-tech.io/kubegres/controllers/ctx/resources"
 )
 
@@ -72,6 +73,9 @@ func (r *KubegresRestoreReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	restoreJobContext, err := resources.CreateRestoreJobContext(restoreJob, ctx, r.Logger, r.Client, r.Recorder)
 	if err != nil {
 		return ctrl.Result{}, err
+	} else if restoreJobContext.RestoreStatusWrapper.GetCurrentStage() == ctrl_ctx.StageRestoreJobIsCompleted {
+		restoreJobContext.LogWrapper.InfoEvent("RestoreJobAlreadyComplete", "The restore job is already complete. No further changes will be applied.")
+		return ctrl.Result{}, nil
 	}
 
 	// ### 2. Check kubegres restore spec

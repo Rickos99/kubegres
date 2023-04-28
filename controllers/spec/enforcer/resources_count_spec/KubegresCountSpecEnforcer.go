@@ -46,6 +46,7 @@ func (r *KubegresCountSpecEnforcer) EnforceSpec() error {
 	}
 
 	if r.isJobCompleted() {
+		r.kubegresRestoreContext.Status.SetCurrentStage(ctx.StageRestoreJobIsCompleted)
 		return r.finalizeKubegres()
 	}
 
@@ -103,7 +104,6 @@ func (r *KubegresCountSpecEnforcer) finalizeKubegres() error {
 		if err := r.kubegresRestoreContext.Client.Update(r.kubegresRestoreContext.Ctx, kubegres); err != nil {
 			return err
 		}
-		r.kubegresRestoreContext.Status.SetCurrentStage(ctx.StageRestoreJobIsCompleted)
 	}
 	return nil
 }
