@@ -17,11 +17,13 @@ package resources_count_spec
 import (
 	kubegresv1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
+	"reactive-tech.io/kubegres/controllers/spec/template"
 	"reactive-tech.io/kubegres/controllers/states"
 )
 
 type KubegresCountSpecEnforcer struct {
 	kubegresRestoreContext ctx.KubegresRestoreContext
+	resourcesCreator       template.RestoreJobResourcesCreatorTemplate
 	restoreStates          states.RestoreResourceStates
 	targetKubegresSpec     kubegresv1.KubegresSpec
 }
@@ -29,8 +31,11 @@ type KubegresCountSpecEnforcer struct {
 func CreateKubegresCountSpecEnforcer(kubegresRestoreContext ctx.KubegresRestoreContext,
 	restoreStates states.RestoreResourceStates,
 	targetKubegresSpec kubegresv1.KubegresSpec) KubegresCountSpecEnforcer {
+
+	resourcesCreator := template.CreateRestoreJobCreator(kubegresRestoreContext)
 	return KubegresCountSpecEnforcer{
 		kubegresRestoreContext: kubegresRestoreContext,
+		resourcesCreator:       resourcesCreator,
 		restoreStates:          restoreStates,
 		targetKubegresSpec:     targetKubegresSpec,
 	}
@@ -54,29 +59,14 @@ func (r *KubegresCountSpecEnforcer) EnforceSpec() error {
 }
 
 func (r *KubegresCountSpecEnforcer) deployKubegres() error {
-	var replicas int32 = 1
-	kubegres := &kubegresv1.Kubegres{}
-	kubegres.Spec = r.targetKubegresSpec
-	kubegres.ObjectMeta.Name = r.kubegresRestoreContext.KubegresRestore.Spec.ClusterName
-	kubegres.ObjectMeta.Namespace = r.kubegresRestoreContext.KubegresRestore.Namespace
-	kubegres.Spec.Replicas = &replicas
-
-	kubegres.Labels = map[string]string{}
-	kubegres.Labels[ctx.ManagedByKubegresRestoreLabel] = "true"
-
-	if r.areCustomResourceLimitsDefined() {
-		kubegres.Spec.Resources = r.kubegresRestoreContext.KubegresRestore.Spec.Resources
-	} else {
-		kubegres.Spec.Resources = r.kubegresRestoreContext.SourceKubegresClusterSpec.Resources
-	}
-
-	err := r.kubegresRestoreContext.Client.Create(r.kubegresRestoreContext.Ctx, kubegres)
+	kubegresTemplate := r.resourcesCreator.CreateKubegresResource(r.targetKubegresSpec)
+	err := r.kubegresRestoreContext.Client.Create(r.kubegresRestoreContext.Ctx, &kubegresTemplate)
 	if err != nil {
 		r.kubegresRestoreContext.Log.ErrorEvent("KubegresDeploymentErr", err, "Unable to deploy kubegres resource.")
 		return err
 	}
 
-	r.kubegresRestoreContext.Log.InfoEvent("KubegresDeployed", "Deployed kubegres resource", "Kubegres name", kubegres.Name)
+	r.kubegresRestoreContext.Log.InfoEvent("KubegresDeployed", "Deployed kubegres resource", "Kubegres name", kubegresTemplate.Name)
 
 	return nil
 }
@@ -89,7 +79,7 @@ func (r *KubegresCountSpecEnforcer) finalizeKubegres() error {
 		kubegres.Spec.Replicas = r.kubegresRestoreContext.SourceKubegresClusterSpec.Replicas
 	}
 
-	if r.areCustomResourceLimitsDefined() {
+	if r.kubegresRestoreContext.AreResourcesSpecifiedForRestoreJob() {
 		kubegresIsChanged = true
 		kubegres.Spec.Resources = r.kubegresRestoreContext.SourceKubegresClusterSpec.Resources
 	}
@@ -106,11 +96,6 @@ func (r *KubegresCountSpecEnforcer) finalizeKubegres() error {
 		}
 	}
 	return nil
-}
-
-func (r *KubegresCountSpecEnforcer) areCustomResourceLimitsDefined() bool {
-	restoreSpec := r.kubegresRestoreContext.KubegresRestore.Spec
-	return restoreSpec.Resources.Requests != nil || restoreSpec.Resources.Limits != nil
 }
 
 func (r *KubegresCountSpecEnforcer) isClusterDeployed() bool {

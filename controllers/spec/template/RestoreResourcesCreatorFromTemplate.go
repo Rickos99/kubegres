@@ -79,6 +79,26 @@ func (r *RestoreJobResourcesCreatorTemplate) CreateFileCheckerPod() (core.Pod, e
 	return podTemplate, nil
 }
 
+func (r *RestoreJobResourcesCreatorTemplate) CreateKubegresResource(kubegresSpec kubegresv1.KubegresSpec) kubegresv1.Kubegres {
+	var replicas int32 = 1
+	kubegres := kubegresv1.Kubegres{}
+	kubegres.Spec = kubegresSpec
+	kubegres.ObjectMeta.Name = r.kubegresRestoreContext.KubegresRestore.Spec.ClusterName
+	kubegres.ObjectMeta.Namespace = r.kubegresRestoreContext.KubegresRestore.Namespace
+	kubegres.Spec.Replicas = &replicas
+
+	kubegres.Labels = map[string]string{}
+	kubegres.Labels[ctx.ManagedByKubegresRestoreLabel] = "true"
+
+	if r.kubegresRestoreContext.AreResourcesSpecifiedForRestoreJob() {
+		kubegres.Spec.Resources = r.kubegresRestoreContext.KubegresRestore.Spec.Resources
+	} else {
+		kubegres.Spec.Resources = r.kubegresRestoreContext.SourceKubegresClusterSpec.Resources
+	}
+
+	return kubegres
+}
+
 func (r *RestoreJobResourcesCreatorTemplate) getKubegresEnvVar(envName string, kubegresSpec kubegresv1.KubegresSpec) core.EnvVar {
 	for _, envVar := range kubegresSpec.Env {
 		if envVar.Name == envName {
