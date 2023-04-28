@@ -64,10 +64,12 @@ func CreateRestoreJobContext(kubegresRestore *v1.KubegresRestore,
 
 func (r *RestoreJobContext) addResourcesCountSpecEnforcers(sourceKubegresSpec v1.KubegresSpec) {
 	r.ResourcesCountSpecEnforcer = resources_count_spec.ResourcesCountSpecEnforcer{}
+	fileCheckerPodCountSpecEnforcer := resources_count_spec.CreateFileCheckerPodCountSpecEnforcer(r.KubegresRestoreContext, r.RestoreResourceStates)
 	kubegresCountSpecEnforcer := resources_count_spec.CreateKubegresCountSpecEnforcer(r.KubegresRestoreContext, r.RestoreResourceStates, sourceKubegresSpec)
 	jobCountSpecEnforcer := resources_count_spec.CreateJobCountSpecEnforcer(r.KubegresRestoreContext, r.RestoreResourceStates, sourceKubegresSpec)
 
 	r.ResourcesCountSpecEnforcer = resources_count_spec.ResourcesCountSpecEnforcer{}
+	r.ResourcesCountSpecEnforcer.AddSpecEnforcer(&fileCheckerPodCountSpecEnforcer)
 	r.ResourcesCountSpecEnforcer.AddSpecEnforcer(&kubegresCountSpecEnforcer)
 	r.ResourcesCountSpecEnforcer.AddSpecEnforcer(&jobCountSpecEnforcer)
 }

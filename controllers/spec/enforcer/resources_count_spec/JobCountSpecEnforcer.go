@@ -42,7 +42,7 @@ func CreateJobCountSpecEnforcer(kubegresRestoreContext ctx.KubegresRestoreContex
 }
 
 func (r *JobCountSpecEnforcer) EnforceSpec() error {
-	if r.isJobCompleted() || r.isJobDeployed() {
+	if r.isJobCompleted() || r.isJobDeployed() || r.isSnapshotFoundInPVC() {
 		return nil
 	}
 
@@ -79,4 +79,8 @@ func (r *JobCountSpecEnforcer) isJobCompleted() bool {
 
 func (r *JobCountSpecEnforcer) isJobDeployed() bool {
 	return r.restoreStates.Job.IsJobDeployed
+}
+
+func (r *JobCountSpecEnforcer) isSnapshotFoundInPVC() bool {
+	return r.restoreStates.FileChecker.ExitStatus != states.OkExitStatus
 }

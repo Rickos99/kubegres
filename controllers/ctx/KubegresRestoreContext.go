@@ -42,9 +42,11 @@ const (
 	RestoreJobSuffix              = "-job"
 	RestoreJobKubegresTargetField = ".spec.clusterName"
 	ManagedByKubegresRestoreLabel = "managed-by-kubegres-restore"
+	FileCheckerPodSuffix          = "-file-checker"
 )
 
 const (
+	StageCheckingSnapshotFile  = "Checking snapshot file"
 	StageDeployingCluster      = "Deploying Kubegres Cluster"
 	StageWaitingForCluster     = "Waiting for Kubegres Cluster to be ready"
 	StageRestoreJobIsDeploying = "Waiting for restore job to deploy"
@@ -72,6 +74,10 @@ func CreateKubegresRestoreContext(kubegresRestore *v1.KubegresRestore,
 	kubegresRestoreContext.SourceKubegresClusterSpec = sourceKubegresClusterSpec
 
 	return kubegresRestoreContext, err
+}
+
+func (r *KubegresRestoreContext) GetFileCheckerPodName() string {
+	return r.KubegresRestore.Name + FileCheckerPodSuffix
 }
 
 func (r *KubegresRestoreContext) GetRestoreJobName() string {

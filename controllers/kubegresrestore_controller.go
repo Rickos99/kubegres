@@ -22,6 +22,7 @@ import (
 
 	"github.com/go-logr/logr"
 	batchv1 "k8s.io/api/batch/v1"
+	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -109,6 +110,7 @@ func (r *KubegresRestoreReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestsFromMapFunc(r.findObjectsForKubegres),
 		).
 		Owns(&batchv1.Job{}).
+		Owns(&core.Pod{}).
 		Complete(r)
 }
 

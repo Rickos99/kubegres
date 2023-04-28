@@ -37,6 +37,10 @@ func CreateKubegresCountSpecEnforcer(kubegresRestoreContext ctx.KubegresRestoreC
 }
 
 func (r *KubegresCountSpecEnforcer) EnforceSpec() error {
+	if r.isSnapshotFoundInPVC() {
+		return nil
+	}
+
 	if !r.isClusterDeployed() {
 		return r.deployKubegres()
 	}
@@ -121,4 +125,8 @@ func (r *KubegresCountSpecEnforcer) isJobCompleted() bool {
 
 func (r *KubegresCountSpecEnforcer) kubegresHasReplicas() bool {
 	return r.kubegresRestoreContext.SourceKubegresClusterSpec.Replicas != nil
+}
+
+func (r *KubegresCountSpecEnforcer) isSnapshotFoundInPVC() bool {
+	return r.restoreStates.FileChecker.ExitStatus != states.OkExitStatus
 }
