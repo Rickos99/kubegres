@@ -46,16 +46,7 @@ func (r *KubegresCountSpecEnforcer) EnforceSpec() error {
 	}
 
 	if r.isJobCompleted() {
-		// TODO: reorder these 2 operations. First modify resource limits, then add replicas. Should be faster that way.
-		if r.kubegresHasReplicas() {
-			if err := r.addReplicasToKubegres(); err != nil {
-				return err
-			}
-		}
-
-		if r.areCustomResourceLimitsDefined() {
-			return r.modifyResourceLimitsOfKubegres()
-		}
+		return r.finalizeKubegres()
 	}
 
 	return nil
@@ -89,30 +80,37 @@ func (r *KubegresCountSpecEnforcer) deployKubegres() error {
 	return nil
 }
 
-func (r *KubegresCountSpecEnforcer) addReplicasToKubegres() error {
+func (r *KubegresCountSpecEnforcer) finalizeKubegres() error {
+	kubegresIsChanged := false
 	kubegres := r.restoreStates.Cluster.Kubegres
-	kubegres.Spec.Replicas = r.kubegresRestoreContext.SourceKubegresClusterSpec.Replicas
-
-	err := r.kubegresRestoreContext.Client.Update(r.kubegresRestoreContext.Ctx, kubegres)
-	if err != nil {
-		r.kubegresRestoreContext.Log.ErrorEvent("KubegresScaleErr", err, "Unable to scale kubegres resource.")
-		return err
+	if r.kubegresHasReplicas() {
+		kubegresIsChanged = true
+		kubegres.Spec.Replicas = r.kubegresRestoreContext.SourceKubegresClusterSpec.Replicas
 	}
 
-	r.kubegresRestoreContext.Log.InfoEvent("KubegresReplicasAdded", "Added replicas to kubegres resource", "Kubegres name", kubegres.Name)
+	if r.areCustomResourceLimitsDefined() {
+		kubegresIsChanged = true
+		kubegres.Spec.Resources = r.kubegresRestoreContext.SourceKubegresClusterSpec.Resources
+	}
+
+	if r.restoreStates.Cluster.IsManagedByKubegresRestore {
+		kubegresIsChanged = true
+		delete(kubegres.Labels, ctx.ManagedByKubegresRestoreLabel)
+		r.kubegresRestoreContext.Log.InfoEvent("ReleasedKubegresResource", "Restore label of kubegres resource will be removed. No further changes will be applied", "Kubegres name", kubegres.Name)
+	}
+
+	if kubegresIsChanged {
+		if err := r.kubegresRestoreContext.Client.Update(r.kubegresRestoreContext.Ctx, kubegres); err != nil {
+			return err
+		}
+		r.kubegresRestoreContext.Status.SetCurrentStage(ctx.StageRestoreJobIsCompleted)
+	}
 	return nil
 }
 
 func (r *KubegresCountSpecEnforcer) areCustomResourceLimitsDefined() bool {
 	restoreSpec := r.kubegresRestoreContext.KubegresRestore.Spec
 	return restoreSpec.Resources.Requests != nil || restoreSpec.Resources.Limits != nil
-}
-
-func (r *KubegresCountSpecEnforcer) modifyResourceLimitsOfKubegres() error {
-	kubegres := r.restoreStates.Cluster.Kubegres
-	kubegres.Spec.Resources = r.kubegresRestoreContext.SourceKubegresClusterSpec.Resources
-
-	return r.kubegresRestoreContext.Client.Update(r.kubegresRestoreContext.Ctx, kubegres)
 }
 
 func (r *KubegresCountSpecEnforcer) isClusterDeployed() bool {
