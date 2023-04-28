@@ -64,7 +64,7 @@ func (r *RestoreSpecChecker) CheckSpec() (SpecCheckResult, error) {
 		specCheckResult.HasSpecFatalError = true
 		specCheckResult.FatalErrorMessage = r.logSpecErrMsg("In the Resources Spec the value of " +
 			"'spec.ClusterName' must not refer to an existing Kubegres resource. Please change this value, " +
-			"otherwise the restore process cannot proceed.")
+			"otherwise this operator cannot work correctly.")
 	}
 
 	if r.isClusterNameAndClusterSpecDefined() {
@@ -83,8 +83,8 @@ func (r *RestoreSpecChecker) CheckSpec() (SpecCheckResult, error) {
 		if !isDataSourceKubegresClusterDeployed {
 			specCheckResult.HasSpecFatalError = true
 			specCheckResult.FatalErrorMessage = r.logSpecErrMsg("In the Resources Spec the value of " +
-				"'spec.DataSource.Cluster.ClusterName' refers to a Kubegres resource which is not deployed. Please deploy this " +
-				"Kubegres resource, otherwise this operator cannot work correctly.")
+				"'spec.DataSource.Cluster.ClusterName' refers to a Kubegres resource which is not deployed. Please change this " +
+				"value to a deployed Kubegres resource, otherwise this operator cannot work correctly.")
 		}
 	} else {
 		// TODO Check 'spec.DataSource.Cluster.ClusterSpec'
