@@ -21,8 +21,10 @@ func (r *RestoreStatusWrapper) GetIsCompleted() bool {
 }
 
 func (r *RestoreStatusWrapper) SetIsCompleted(value bool) {
-	r.addStatusFieldToUpdate("IsCompleted", value)
-	r.KubegresRestore.Status.IsCompleted = value
+	if r.KubegresRestore.Status.IsCompleted != value {
+		r.addStatusFieldToUpdate("IsCompleted", value)
+		r.KubegresRestore.Status.IsCompleted = value
+	}
 }
 
 func (r *RestoreStatusWrapper) GetCurrentStage() string {
@@ -30,8 +32,10 @@ func (r *RestoreStatusWrapper) GetCurrentStage() string {
 }
 
 func (r *RestoreStatusWrapper) SetCurrentStage(value string) {
-	r.addStatusFieldToUpdate("CurrentStage", value)
-	r.KubegresRestore.Status.CurrentStage = value
+	if r.KubegresRestore.Status.CurrentStage != value {
+		r.addStatusFieldToUpdate("CurrentStage", value)
+		r.KubegresRestore.Status.CurrentStage = value
+	}
 }
 
 func (r *RestoreStatusWrapper) UpdateStatusIfChanged() error {
@@ -58,7 +62,6 @@ func (r *RestoreStatusWrapper) UpdateStatusIfChanged() error {
 }
 
 func (r *RestoreStatusWrapper) addStatusFieldToUpdate(statusFieldName string, newValue interface{}) {
-
 	if r.statusFieldsToUpdate == nil {
 		r.statusFieldsToUpdate = make(map[string]interface{})
 	}
