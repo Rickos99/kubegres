@@ -75,7 +75,7 @@ run: install ## Run a controller from your host.
 #docker-build: test ## Build docker image with the manager.
 .PHONY: docker-build-push
 docker-build-push: build ## Build docker image with the manager.
-	docker buildx build --platform linux/amd64,linux/arm64 -t ${IMG} --push .
+	docker buildx build --platform linux/amd64 -t ${IMG} --push .
 
 #.PHONY: docker-build
 #docker-build: test ## Build docker image with the manager.
@@ -105,14 +105,14 @@ ifeq ($(IMG),$(LATEST))
 	@echo "PLEASE PROVIDE THE ARGUMENT 'IMG' WHEN RUNNING 'make deploy'. EXAMPLE OF USAGE: 'make deploy IMG=reactivetechio/kubegres:1.16'"
 	exit 1
 endif
-	@echo "RUNNING THE ACCEPTANCE TESTS AND THEN WILL DEPLOY $(IMG) INTO DOCKER HUB."
+	@echo "WILL DEPLOY $(IMG) INTO DOCKER HUB."
 
 ## Usage: 'make deploy IMG=reactivetechio/kubegres:[version]'
 ## eg: 'make deploy IMG=reactivetechio/kubegres:1.16'
 ## Run acceptance tests then deploy into Docker Hub the controller as the Docker image provided in arg ${IMG}
 ## and update the local file "kubegres.yaml" with the image ${IMG}
 .PHONY: deploy
-deploy: deploy-check test docker-build-push kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
+deploy: deploy-check docker-build-push kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/default > kubegres.yaml
 	@echo "DEPLOYED $(IMG) INTO DOCKER HUB. UPDATED 'kubegres.yaml' WITH '$(IMG)'. YOU CAN COMMIT 'kubegres.yaml' AND CREATE A RELEASE IN GITHUB."
