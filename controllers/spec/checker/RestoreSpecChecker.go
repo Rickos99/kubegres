@@ -16,6 +16,7 @@ package checker
 
 import (
 	"errors"
+	"reflect"
 
 	core "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -59,6 +60,20 @@ func (r *RestoreSpecChecker) CheckSpec() (SpecCheckResult, error) {
 		specCheckResult.FatalErrorMessage = r.createErrMsgSpecUndefined("spec.DataSource.File.Snapshot")
 	}
 
+	if r.restoreResourceStates.Cluster.IsDeployed && !r.isDeployedClusterMangedByKubegresRestore() {
+		specCheckResult.HasSpecFatalError = true
+		specCheckResult.FatalErrorMessage = r.logSpecErrMsg("In the Resources Spec the value of " +
+			"'spec.ClusterName' must not refer to an existing Kubegres resource. Please change this value, " +
+			"otherwise this operator cannot work correctly.")
+	}
+
+	if r.isClusterNameAndClusterSpecDefined() {
+		specCheckResult.HasSpecFatalError = true
+		specCheckResult.FatalErrorMessage = r.logSpecErrMsg("In the Resources Spec the fields " +
+			"'spec.DataSource.Cluster.ClusterName' and 'spec.DataSource.Cluster.ClusterSpec'" +
+			" cannot be used at the same time. Please unset one of them.")
+	}
+
 	if r.kubegresRestoreContext.ShouldRestoreFromExistingCluster() {
 		isDataSourceKubegresClusterDeployed, err := r.isDataSourceKubegresClusterDeployed()
 		if err != nil {
@@ -68,8 +83,8 @@ func (r *RestoreSpecChecker) CheckSpec() (SpecCheckResult, error) {
 		if !isDataSourceKubegresClusterDeployed {
 			specCheckResult.HasSpecFatalError = true
 			specCheckResult.FatalErrorMessage = r.logSpecErrMsg("In the Resources Spec the value of " +
-				"'spec.DataSource.Cluster.ClusterName' refers to a Kubegres resource which is not deployed. Please deploy this " +
-				"Kubegres resource, otherwise this operator cannot work correctly.")
+				"'spec.DataSource.Cluster.ClusterName' refers to a Kubegres resource which is not deployed. Please change this " +
+				"value to a deployed Kubegres resource, otherwise this operator cannot work correctly.")
 		}
 	} else {
 		// TODO Check 'spec.DataSource.Cluster.ClusterSpec'
@@ -99,6 +114,20 @@ func (r *RestoreSpecChecker) CheckSpec() (SpecCheckResult, error) {
 
 func (r *RestoreSpecChecker) isRestoreJobPvcDeployed() bool {
 	return r.restoreResourceStates.Job.IsPvcDeployed
+}
+
+func (r *RestoreSpecChecker) isDeployedClusterMangedByKubegresRestore() bool {
+	return r.restoreResourceStates.Cluster.IsDeployed && r.restoreResourceStates.Cluster.IsManagedByKubegresRestore
+}
+
+func (r *RestoreSpecChecker) isClusterNameAndClusterSpecDefined() bool {
+	clusterSpec := r.kubegresRestoreContext.KubegresRestore.Spec.DataSource.Cluster.ClusterSpec
+	emptyClusterSpec := kubegresv1.KubegresSpec{}
+
+	clusterSpecIsSpecified := !reflect.DeepEqual(clusterSpec, emptyClusterSpec)
+	clusterNameIsSpecified := r.kubegresRestoreContext.KubegresRestore.Spec.DataSource.Cluster.ClusterName != ""
+
+	return clusterSpecIsSpecified && clusterNameIsSpecified
 }
 
 func (r *RestoreSpecChecker) isDataSourceKubegresClusterDeployed() (bool, error) {

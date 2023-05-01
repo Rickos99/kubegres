@@ -17,69 +17,84 @@ package resources_count_spec
 import (
 	kubegresv1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
+	"reactive-tech.io/kubegres/controllers/spec/template"
 	"reactive-tech.io/kubegres/controllers/states"
 )
 
 type KubegresCountSpecEnforcer struct {
 	kubegresRestoreContext ctx.KubegresRestoreContext
+	resourcesCreator       template.RestoreJobResourcesCreatorTemplate
 	restoreStates          states.RestoreResourceStates
-	kubegresSpec           kubegresv1.KubegresSpec
+	targetKubegresSpec     kubegresv1.KubegresSpec
 }
 
 func CreateKubegresCountSpecEnforcer(kubegresRestoreContext ctx.KubegresRestoreContext,
 	restoreStates states.RestoreResourceStates,
-	kubegresSpec kubegresv1.KubegresSpec) KubegresCountSpecEnforcer {
+	targetKubegresSpec kubegresv1.KubegresSpec) KubegresCountSpecEnforcer {
+
+	resourcesCreator := template.CreateRestoreJobCreator(kubegresRestoreContext)
 	return KubegresCountSpecEnforcer{
 		kubegresRestoreContext: kubegresRestoreContext,
+		resourcesCreator:       resourcesCreator,
 		restoreStates:          restoreStates,
-		kubegresSpec:           kubegresSpec,
+		targetKubegresSpec:     targetKubegresSpec,
 	}
 }
 
 func (r *KubegresCountSpecEnforcer) EnforceSpec() error {
-	//TODO: If job is completed, set replicas and update the cluster spec.
+	if r.isSnapshotFoundInPVC() {
+		return nil
+	}
+
 	if !r.isClusterDeployed() {
 		return r.deployKubegres()
 	}
 
-	if r.isClusterDeployed() && r.isJobCompleted() && r.kubegresHasReplicas() {
-		return r.addReplicasToKubegres()
+	if r.isJobCompleted() {
+		r.kubegresRestoreContext.Status.SetCurrentStage(ctx.StageRestoreJobIsCompleted)
+		return r.finalizeKubegres()
 	}
 
 	return nil
 }
 
 func (r *KubegresCountSpecEnforcer) deployKubegres() error {
-	var replicas int32 = 1
-	kubegres := &kubegresv1.Kubegres{}
-	kubegres.Spec = r.kubegresSpec
-	kubegres.ObjectMeta.Name = r.kubegresRestoreContext.KubegresRestore.Spec.ClusterName
-	kubegres.ObjectMeta.Namespace = r.kubegresRestoreContext.KubegresRestore.Namespace
-	kubegres.Spec.Replicas = &replicas
-	kubegres.Spec.Resources = r.kubegresRestoreContext.KubegresRestore.Spec.Resources
-
-	err := r.kubegresRestoreContext.Client.Create(r.kubegresRestoreContext.Ctx, kubegres)
+	kubegresTemplate := r.resourcesCreator.CreateKubegresResource(r.targetKubegresSpec)
+	err := r.kubegresRestoreContext.Client.Create(r.kubegresRestoreContext.Ctx, &kubegresTemplate)
 	if err != nil {
 		r.kubegresRestoreContext.Log.ErrorEvent("KubegresDeploymentErr", err, "Unable to deploy kubegres resource.")
 		return err
 	}
 
-	r.kubegresRestoreContext.Log.InfoEvent("KubegresDeployed", "Deployed kubegres resource", "Kubegres name", kubegres.Name)
+	r.kubegresRestoreContext.Log.InfoEvent("KubegresDeployed", "Deployed kubegres resource", "Kubegres name", kubegresTemplate.Name)
 
 	return nil
 }
 
-func (r *KubegresCountSpecEnforcer) addReplicasToKubegres() error {
+func (r *KubegresCountSpecEnforcer) finalizeKubegres() error {
+	kubegresIsChanged := false
 	kubegres := r.restoreStates.Cluster.Kubegres
-	kubegres.Spec.Replicas = r.kubegresRestoreContext.KubegresRestore.Spec.DataSource.Cluster.ClusterSpec.Replicas
-
-	err := r.kubegresRestoreContext.Client.Update(r.kubegresRestoreContext.Ctx, kubegres)
-	if err != nil {
-		r.kubegresRestoreContext.Log.ErrorEvent("KubegresScaleErr", err, "Unable to scale kubegres resource.")
-		return err
+	if r.kubegresHasReplicas() {
+		kubegresIsChanged = true
+		kubegres.Spec.Replicas = r.kubegresRestoreContext.SourceKubegresClusterSpec.Replicas
 	}
 
-	r.kubegresRestoreContext.Log.InfoEvent("KubegresReplicasAdded", "Added replicas to kubegres resource", "Kubegres name", kubegres.Name)
+	if r.kubegresRestoreContext.AreResourcesSpecifiedForRestoreJob() {
+		kubegresIsChanged = true
+		kubegres.Spec.Resources = r.kubegresRestoreContext.SourceKubegresClusterSpec.Resources
+	}
+
+	if r.restoreStates.Cluster.IsManagedByKubegresRestore {
+		kubegresIsChanged = true
+		delete(kubegres.Labels, ctx.ManagedByKubegresRestoreLabel)
+		r.kubegresRestoreContext.Log.InfoEvent("ReleasedKubegresResource", "Restore label of kubegres resource will be removed. No further changes will be applied", "Kubegres name", kubegres.Name)
+	}
+
+	if kubegresIsChanged {
+		if err := r.kubegresRestoreContext.Client.Update(r.kubegresRestoreContext.Ctx, kubegres); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -92,6 +107,9 @@ func (r *KubegresCountSpecEnforcer) isJobCompleted() bool {
 }
 
 func (r *KubegresCountSpecEnforcer) kubegresHasReplicas() bool {
-	// TODO: Return number of replicas instead
-	return r.kubegresRestoreContext.KubegresRestore.Spec.DataSource.Cluster.ClusterSpec.Replicas != nil
+	return r.kubegresRestoreContext.SourceKubegresClusterSpec.Replicas != nil
+}
+
+func (r *KubegresCountSpecEnforcer) isSnapshotFoundInPVC() bool {
+	return r.restoreStates.FileChecker.ExitStatus != states.OkExitStatus
 }

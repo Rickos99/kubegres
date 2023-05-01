@@ -22,6 +22,7 @@ import (
 
 	"github.com/go-logr/logr"
 	batchv1 "k8s.io/api/batch/v1"
+	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -34,6 +35,7 @@ import (
 
 	kubegresv1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
+	ctrl_ctx "reactive-tech.io/kubegres/controllers/ctx"
 	"reactive-tech.io/kubegres/controllers/ctx/resources"
 )
 
@@ -71,6 +73,9 @@ func (r *KubegresRestoreReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	restoreJobContext, err := resources.CreateRestoreJobContext(restoreJob, ctx, r.Logger, r.Client, r.Recorder)
 	if err != nil {
 		return ctrl.Result{}, err
+	} else if restoreJobContext.RestoreStatusWrapper.GetCurrentStage() == ctrl_ctx.StageRestoreJobIsCompleted {
+		restoreJobContext.LogWrapper.InfoEvent("RestoreJobAlreadyComplete", "The restore job is already complete. No further changes will be applied.")
+		return ctrl.Result{}, nil
 	}
 
 	// ### 2. Check kubegres restore spec
@@ -109,6 +114,7 @@ func (r *KubegresRestoreReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestsFromMapFunc(r.findObjectsForKubegres),
 		).
 		Owns(&batchv1.Job{}).
+		Owns(&core.Pod{}).
 		Complete(r)
 }
 

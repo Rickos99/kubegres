@@ -19,28 +19,34 @@ package ctx
 import (
 	"context"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	v1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx/log"
 	"reactive-tech.io/kubegres/controllers/ctx/status"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type KubegresRestoreContext struct {
-	KubegresRestore *v1.KubegresRestore
-	Status          *status.RestoreStatusWrapper
-	Ctx             context.Context
-	Log             log.LogWrapper[*v1.KubegresRestore]
-	Client          client.Client
+	KubegresRestore           *v1.KubegresRestore
+	SourceKubegresClusterSpec v1.KubegresSpec
+	Status                    *status.RestoreStatusWrapper
+	Ctx                       context.Context
+	Log                       log.LogWrapper[*v1.KubegresRestore]
+	Client                    client.Client
 }
 
 const (
 	KindKubegresRestore           = "KubegresRestore"
 	RestoreJobSuffix              = "-job"
 	RestoreJobKubegresTargetField = ".spec.clusterName"
+	ManagedByKubegresRestoreLabel = "managed-by-kubegres-restore"
+	FileCheckerPodSuffix          = "-file-checker"
 )
 
 const (
+	StageCheckingSnapshotFile  = "Checking snapshot file"
 	StageDeployingCluster      = "Deploying Kubegres Cluster"
 	StageWaitingForCluster     = "Waiting for Kubegres Cluster to be ready"
 	StageRestoreJobIsDeploying = "Waiting for restore job to deploy"
@@ -48,6 +54,31 @@ const (
 	StageRestoreJobIsCompleted = "Restorejob completed succesfully"
 	StageRestoreJobFailed      = "Restorejob has stopped due to fatal error"
 )
+
+func CreateKubegresRestoreContext(kubegresRestore *v1.KubegresRestore,
+	status *status.RestoreStatusWrapper,
+	ctx context.Context,
+	log log.LogWrapper[*v1.KubegresRestore],
+	client client.Client) (KubegresRestoreContext, error) {
+	kubegresRestoreContext := KubegresRestoreContext{
+		KubegresRestore: kubegresRestore,
+		Status:          status,
+		Ctx:             ctx,
+		Log:             log,
+		Client:          client,
+	}
+	sourceKubegresClusterSpec, err := kubegresRestoreContext.assignSourceKubegresCluserSpec(kubegresRestore)
+	if err != nil {
+		return kubegresRestoreContext, err
+	}
+	kubegresRestoreContext.SourceKubegresClusterSpec = sourceKubegresClusterSpec
+
+	return kubegresRestoreContext, err
+}
+
+func (r *KubegresRestoreContext) GetFileCheckerPodName() string {
+	return r.KubegresRestore.Name + FileCheckerPodSuffix
+}
 
 func (r *KubegresRestoreContext) GetRestoreJobName() string {
 	return r.KubegresRestore.Name + RestoreJobSuffix
@@ -62,4 +93,28 @@ func (r *KubegresRestoreContext) GetNamespacesresourceName(name string) types.Na
 
 func (r *KubegresRestoreContext) ShouldRestoreFromExistingCluster() bool {
 	return r.KubegresRestore.Spec.DataSource.Cluster.ClusterName != ""
+}
+
+func (r *KubegresRestoreContext) AreResourcesSpecifiedForRestoreJob() bool {
+	restoreSpec := r.KubegresRestore.Spec
+	return restoreSpec.Resources.Requests != nil || restoreSpec.Resources.Limits != nil
+}
+
+func (r *KubegresRestoreContext) assignSourceKubegresCluserSpec(kubegresRestore *v1.KubegresRestore) (v1.KubegresSpec, error) {
+	if r.ShouldRestoreFromExistingCluster() {
+		return r.getKubegresSpecFromExistingCluster()
+	} else {
+		return r.KubegresRestore.Spec.DataSource.Cluster.ClusterSpec, nil
+	}
+}
+
+func (r *KubegresRestoreContext) getKubegresSpecFromExistingCluster() (v1.KubegresSpec, error) {
+	cluster := &v1.Kubegres{}
+	clusterKey := r.GetNamespacesresourceName(r.KubegresRestore.Spec.DataSource.Cluster.ClusterName)
+	err := r.Client.Get(r.Ctx, clusterKey, cluster)
+	if err != nil && apierrors.IsNotFound(err) {
+		r.Log.ErrorEvent("KubegresSpecFromExistingClusterErr", err, "Unable to get Kubegres specification from non-existing source cluster", "ClusterName", clusterKey.Name)
+		err = nil
+	}
+	return cluster.Spec, err
 }

@@ -94,7 +94,6 @@ func (r *RestoreJobStates) loadStates() (err error) {
 		}
 
 		r.kubegresRestoreContext.Status.SetIsCompleted(true)
-		r.kubegresRestoreContext.Status.SetCurrentStage(ctx.StageRestoreJobIsCompleted)
 	} else if jobHasFailed {
 		r.JobPhase = JobFailed
 		r.kubegresRestoreContext.Status.SetIsCompleted(false)

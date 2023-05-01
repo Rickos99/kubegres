@@ -20,6 +20,7 @@ func CreateRestoreResourcesStatesLogger(kubegresRestoreContext ctx.KubegresResto
 func (r *RestoreResourcesStatesLogger) Log() {
 	r.logKubegresStates()
 	r.logRestoreJobStates()
+	r.logFileCheckerPodStates()
 }
 
 func (r *RestoreResourcesStatesLogger) logKubegresStates() {
@@ -33,4 +34,12 @@ func (r *RestoreResourcesStatesLogger) logRestoreJobStates() {
 		"IsJobDeployed", r.restoreResourcesStates.Job.IsJobDeployed,
 		"IsPvcDeployed", r.restoreResourcesStates.Job.IsPvcDeployed,
 		"JobPhase", r.restoreResourcesStates.Job.JobPhase)
+}
+
+func (r *RestoreResourcesStatesLogger) logFileCheckerPodStates() {
+	r.kubegresRestoreContext.Log.Info("FileCheckerPod states.",
+		"IsPodDeployed", r.restoreResourcesStates.FileChecker.IsPodDeployed,
+		"IsPodTerminated", r.restoreResourcesStates.FileChecker.IsPodTerminated,
+		"ExitStatus", r.restoreResourcesStates.FileChecker.ExitStatus,
+	)
 }

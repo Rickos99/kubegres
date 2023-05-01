@@ -21,8 +21,9 @@ import "reactive-tech.io/kubegres/controllers/ctx"
 type RestoreResourceStates struct {
 	kubegresRestoreContext ctx.KubegresRestoreContext
 
-	Cluster KubegresStates
-	Job     RestoreJobStates
+	Cluster     KubegresStates
+	Job         RestoreJobStates
+	FileChecker FileCheckerPodStates
 }
 
 func LoadRestoreResourceStates(kubegresRestoreContext ctx.KubegresRestoreContext) (RestoreResourceStates, error) {
@@ -42,6 +43,11 @@ func (r *RestoreResourceStates) loadStates() (err error) {
 		return err
 	}
 
+	err = r.loadFileCheckerStates()
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -52,5 +58,10 @@ func (r *RestoreResourceStates) loadClusterStates() (err error) {
 
 func (r *RestoreResourceStates) loadJobStates() (err error) {
 	r.Job, err = loadRestoreJobStates(r.kubegresRestoreContext)
+	return err
+}
+
+func (r *RestoreResourceStates) loadFileCheckerStates() (err error) {
+	r.FileChecker, err = loadFileCheckerPodStates(r.kubegresRestoreContext)
 	return err
 }

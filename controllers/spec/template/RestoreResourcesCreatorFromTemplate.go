@@ -49,7 +49,54 @@ func (r *RestoreJobResourcesCreatorTemplate) CreateRestoreJob(kubegresSpec kubeg
 	container.Env[2].Value = restoreSpec.ClusterName
 	container.Env[3].Value = path.Join(restoreSpec.DataSource.File.Mountpath, restoreSpec.DataSource.File.Snapshot)
 
+	if r.kubegresRestoreContext.AreResourcesSpecifiedForRestoreJob() {
+		restoreJobTemplate.Spec.Template.Spec.Containers[0].Resources = restoreSpec.Resources
+	} else {
+		restoreJobTemplate.Spec.Template.Spec.Containers[0].Resources = core.ResourceRequirements{}
+	}
+
 	return restoreJobTemplate, nil
+}
+
+func (r *RestoreJobResourcesCreatorTemplate) CreateFileCheckerPod() (core.Pod, error) {
+	podTemplate, err := r.loadFileCheckerPodFromTemplate()
+	if err != nil {
+		return podTemplate, err
+	}
+
+	restoreSpec := r.kubegresRestoreContext.KubegresRestore.Spec
+
+	podTemplate.Name = r.kubegresRestoreContext.GetFileCheckerPodName()
+	podTemplate.Namespace = r.kubegresRestoreContext.KubegresRestore.Namespace
+	podTemplate.OwnerReferences = r.getOwnerReference()
+
+	container := &podTemplate.Spec.Containers[0]
+	container.VolumeMounts[0].MountPath = restoreSpec.DataSource.File.Mountpath
+	container.Env[0].Value = path.Join(restoreSpec.DataSource.File.Mountpath, restoreSpec.DataSource.File.Snapshot)
+
+	podTemplate.Spec.Volumes[0].PersistentVolumeClaim.ClaimName = restoreSpec.DataSource.File.PvcName
+
+	return podTemplate, nil
+}
+
+func (r *RestoreJobResourcesCreatorTemplate) CreateKubegresResource(kubegresSpec kubegresv1.KubegresSpec) kubegresv1.Kubegres {
+	var replicas int32 = 1
+	kubegres := kubegresv1.Kubegres{}
+	kubegres.Spec = kubegresSpec
+	kubegres.ObjectMeta.Name = r.kubegresRestoreContext.KubegresRestore.Spec.ClusterName
+	kubegres.ObjectMeta.Namespace = r.kubegresRestoreContext.KubegresRestore.Namespace
+	kubegres.Spec.Replicas = &replicas
+
+	kubegres.Labels = map[string]string{}
+	kubegres.Labels[ctx.ManagedByKubegresRestoreLabel] = "true"
+
+	if r.kubegresRestoreContext.AreResourcesSpecifiedForRestoreJob() {
+		kubegres.Spec.Resources = r.kubegresRestoreContext.KubegresRestore.Spec.Resources
+	} else {
+		kubegres.Spec.Resources = r.kubegresRestoreContext.SourceKubegresClusterSpec.Resources
+	}
+
+	return kubegres
 }
 
 func (r *RestoreJobResourcesCreatorTemplate) getKubegresEnvVar(envName string, kubegresSpec kubegresv1.KubegresSpec) core.EnvVar {
@@ -73,6 +120,16 @@ func (r *RestoreJobResourcesCreatorTemplate) loadRestoreJobFromTemplate() (resto
 		return batchv1.Job{}, err
 	}
 	return *obj.(*batchv1.Job), nil
+}
+
+func (r *RestoreJobResourcesCreatorTemplate) loadFileCheckerPodFromTemplate() (core.Pod, error) {
+	obj, err := r.decodeYaml(yaml.FileCheckerPodTemplate)
+
+	if err != nil {
+		r.kubegresRestoreContext.Log.Error(err, "Unable to load File Checker Pod. Given error:")
+		return core.Pod{}, err
+	}
+	return *obj.(*core.Pod), nil
 }
 
 func (r *RestoreJobResourcesCreatorTemplate) decodeYaml(yamlContents string) (runtime.Object, error) {
