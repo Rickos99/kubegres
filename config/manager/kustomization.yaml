@@ -11,4 +11,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: ricbem/kubegres
-  newTag: "0.1"
+  newTag: 0.1.1

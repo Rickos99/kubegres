@@ -4368,6 +4368,18 @@ rules:
   - update
   - watch
 - apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - kubegres.reactive-tech.io
   resources:
   - kubegres
@@ -4569,7 +4581,7 @@ spec:
         - --leader-elect
         command:
         - /manager
-        image: ricbem/kubegres:0.1
+        image: ricbem/kubegres:0.1.1
         livenessProbe:
           httpGet:
             path: /healthz
