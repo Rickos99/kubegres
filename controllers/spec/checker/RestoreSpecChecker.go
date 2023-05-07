@@ -104,11 +104,6 @@ func (r *RestoreSpecChecker) CheckSpec() (SpecCheckResult, error) {
 		}
 	}
 
-	if spec.DatabaseName == "" {
-		specCheckResult.HasSpecFatalError = true
-		specCheckResult.FatalErrorMessage = r.createErrMsgSpecUndefined("spec.DatabaseName")
-	}
-
 	return specCheckResult, nil
 }
 

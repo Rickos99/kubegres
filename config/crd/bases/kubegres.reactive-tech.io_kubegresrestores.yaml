@@ -3943,8 +3943,6 @@ spec:
                         type: string
                     type: object
                 type: object
-              databaseName:
-                type: string
               env:
                 items:
                   description: EnvVar represents an environment variable present in

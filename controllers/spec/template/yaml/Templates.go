@@ -207,9 +207,8 @@ data:
   #   - The snapshot to use contains one database.
   #
   # Environment
-  #   POSTGRES_DB: 
-  #   RESTOREPOINT_FILEPATH: 
-  #   BACKUP_TARGET_DB_HOST_NAME: 
+  #   RESTOREPOINT_FILEPATH
+  #   BACKUP_TARGET_DB_HOST_NAME:
   restore_database.sh: |
     #!/bin/bash
     set -e
@@ -221,13 +220,10 @@ data:
       exit 2
     fi
 
-    echo "$dt - Restore of ${POSTGRES_DB} from ${RESTOREPOINT_FILEPATH} has started"
+    echo "$dt - Restore of ${KUBEGRES_RESOURCE_NAME} from ${RESTOREPOINT_FILEPATH} has started"
 
-    echo "$dt - Running: createdb --no-password -h ${BACKUP_TARGET_DB_HOST_NAME} -U postgres ${POSTGRES_DB}"
-    createdb --no-password -h ${BACKUP_TARGET_DB_HOST_NAME} -U postgres ${POSTGRES_DB}
-
-    echo "$dt - Running: pg_restore --no-password -d ${POSTGRES_DB} -h ${BACKUP_TARGET_DB_HOST_NAME} -U postgres --verbose --exit-on-error ${RESTOREPOINT_FILEPATH}"
-    pg_restore --no-password -d ${POSTGRES_DB} -h ${BACKUP_TARGET_DB_HOST_NAME} -U postgres --verbose --exit-on-error ${RESTOREPOINT_FILEPATH}
+    echo "$dt - Running: gzip -d -kc ${RESTOREPOINT_FILEPATH} | psql -h ${BACKUP_TARGET_DB_HOST_NAME} -U postgres -w"
+    gzip -d -kc ${RESTOREPOINT_FILEPATH} | psql -h ${BACKUP_TARGET_DB_HOST_NAME} -U postgres -w
 
     if [ $? -ne 0 ]; then
         echo "Unable to restore the database"
@@ -699,17 +695,9 @@ spec:
                 secretKeyRef:
                   name: toBeReplaced
                   key: superUserPassword
-            - name: POSTGRES_DB
-              value: toBeReplaced
             - name: BACKUP_TARGET_DB_HOST_NAME
               value: toBeReplaced
             - name: RESTOREPOINT_FILEPATH
               value: toBeReplaced
-            # - name: POSTGRES_PASSWORD
-            #   valueFrom:
-            #     secretKeyRef:
-            #       name: toBeReplaced
-            #       key: superUserPassword
-
 `
 )
