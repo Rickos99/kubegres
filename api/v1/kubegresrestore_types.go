@@ -48,6 +48,7 @@ type KubegresRestoreSpec struct {
 	Resources    v1.ResourceRequirements `json:"resources,omitempty"`
 	ClusterName  string                  `json:"clusterName,omitempty"`
 	DatabaseName string                  `json:"databaseName,omitempty"`
+	Env          []v1.EnvVar             `json:"env,omitempty"`
 }
 
 // ----------------------- STATUS -----------------------------------------
