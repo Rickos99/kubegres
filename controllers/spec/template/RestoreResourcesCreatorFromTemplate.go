@@ -88,7 +88,7 @@ func (r *RestoreJobResourcesCreatorTemplate) CreateKubegresResource(kubegresSpec
 	kubegres.Spec.Replicas = &replicas
 
 	kubegres.Labels = map[string]string{}
-	kubegres.Labels[ctx.ManagedByKubegresRestoreLabel] = "true"
+	kubegres.Labels[ctx.ManagedByKubegresRestoreLabel] = r.kubegresRestoreContext.KubegresRestore.Name
 
 	if r.kubegresRestoreContext.AreResourcesSpecifiedForRestoreJob() {
 		kubegres.Spec.Resources = r.kubegresRestoreContext.KubegresRestore.Spec.Resources

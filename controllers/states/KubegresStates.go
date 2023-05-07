@@ -123,7 +123,7 @@ func (r *KubegresStates) createKubegresContext() ctx.KubegresContext {
 func (r *KubegresStates) isKubegresManagedByKubegresRestore() bool {
 	label, exists := r.Kubegres.Labels[ctx.ManagedByKubegresRestoreLabel]
 	if exists {
-		return label == "true"
+		return label == r.kubegresRestoreContext.KubegresRestore.Name
 	}
 	return false
 }
